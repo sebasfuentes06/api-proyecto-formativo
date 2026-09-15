@@ -1,145 +1,154 @@
 # Despliegue
 
-Guía para publicar esta API en internet: la base de datos en **Neon**
-(PostgreSQL administrado, plan gratuito) y la API en **Vercel**.
+Cómo se publicó esta API en internet: el código en **Vercel** y la base de
+datos en **Neon**, provisionada desde el propio Marketplace de Vercel.
 
-Al terminar tendrás una URL pública tipo
-`https://api-proyecto-formativo.vercel.app/api/health` que se puede abrir en
-cualquier navegador y mostrar en la sustentación.
+Resultado: <https://api-proyecto-formativo.vercel.app>
 
----
-
-## Parte 1 — La base de datos en Neon
-
-### 1.1 Crear el proyecto
-
-1. Entra a <https://neon.com> y crea la cuenta (puedes usar tu GitHub).
-2. **Create project**:
-   - Name: `essence-api`
-   - Region: la más cercana a Colombia (normalmente `AWS us-east-1` o `us-east-2`)
-3. Al crear el proyecto te muestra la cadena de conexión. **Cópiala.**
-
-Se ve así:
-
-```
-postgresql://usuario:clave@ep-algo-nombre-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
-```
-
-Fíjate en el `-pooler` del nombre del servidor. **Usa la que lo tenga** (en la
-pantalla de Neon aparece como *Pooled connection*). Esa cadena reparte las
-conexiones entre varias peticiones; sin ella, una API en la nube se queda sin
-cupo de conexiones apenas la usan dos o tres personas a la vez.
-
-### 1.2 Crear las tablas desde tu equipo
-
-En la nube no hay pgAdmin para abrir el `.sql` y darle *ejecutar*. Se manda
-desde la terminal con el mismo comando de siempre.
-
-En tu `.env`, comenta las variables locales y agrega la cadena de Neon:
-
-```env
-# PGHOST=localhost
-# PGPORT=5432
-# PGDATABASE=essence_api
-# PGUSER=postgres
-# PGPASSWORD=tu_clave
-
-DATABASE_URL=postgresql://usuario:clave@ep-algo-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
-```
-
-Y corre:
-
-```bash
-npm run db:setup
-```
-
-Debe terminar mostrando 5 categorías, 4 proveedores, 5 clientes y 8 productos.
-
-### 1.3 Comprobar
-
-```bash
-npm run dev
-npm run test:api
-```
-
-Las 62 pruebas deben pasar, ahora contra la base que está en la nube. Con eso
-ya sabes que el esquema quedó bien antes de meterte con el despliegue.
-
-**Cuando termines, devuelve el `.env` a como estaba** para seguir trabajando
-contra tu PostgreSQL local. La cadena de Neon la vas a necesitar otra vez en
-la parte 2, así que guárdala aparte.
+| | |
+|---|---|
+| Documentación interactiva | `/docs` |
+| Especificación OpenAPI | `/api/openapi.json` |
+| Estado del servicio | `/api/health` |
 
 ---
 
-## Parte 2 — La API en Vercel
+## El orden importa
 
-### 2.1 Subir el proyecto a GitHub
+Al desplegar hay una dependencia que no es obvia: la base de datos se
+provisiona **desde dentro** del proyecto de Vercel, así que el proyecto tiene
+que existir primero. Por eso el orden es:
 
-Vercel despliega desde un repositorio, así que primero hay que crear uno.
+```
+1. Subir el código a GitHub
+2. Importarlo en Vercel y desplegar   -> la API vive, pero sin base
+3. Crear la base Neon desde Vercel    -> se inyecta DATABASE_URL sola
+4. Crear las tablas desde tu equipo   -> npm run db:setup
+5. Volver a desplegar                 -> ahora sí, completa
+```
+
+Entre el paso 2 y el 5, `/api/health` responde `"baseDeDatos": "sin conexión"`.
+Eso **no es un error**: es la API diciendo correctamente que está viva pero no
+alcanza ninguna base.
+
+---
+
+## Parte 1 — Subir el código a GitHub
 
 ```bash
 git init
 git add .
-git commit -m "API del proyecto formativo: CRUD de las cuatro entidades"
-```
-
-Crea un repositorio vacío en GitHub (sin README, sin .gitignore) y conéctalo:
-
-```bash
-git remote add origin https://github.com/tu-usuario/api-proyecto-formativo.git
+git commit -m "API del proyecto formativo"
 git branch -M main
+git remote add origin https://github.com/TU-USUARIO/api-proyecto-formativo.git
 git push -u origin main
 ```
 
-Antes del `push`, corre `git status` y confirma que **`.env` no aparece** en la
-lista. El `.gitignore` ya lo excluye, pero ahí va la contraseña de tu base de
-datos y vale la pena mirarlo con los ojos.
-
-### 2.2 Crear el proyecto en Vercel
-
-1. Entra a <https://vercel.com> y crea la cuenta con GitHub.
-2. **Add New → Project** e importa el repositorio que acabas de subir.
-3. Vercel reconoce Express solo. No hace falta tocar Build Command ni Output
-   Directory: déjalos vacíos.
-
-Como esta API está en la raíz del repositorio, **no hay que configurar Root
-Directory**. (Eso solo hace falta cuando la API vive dentro de una subcarpeta.)
-
-### 2.3 Variables de entorno
-
-En la misma pantalla, sección **Environment Variables**:
-
-| Nombre | Valor |
-|---|---|
-| `DATABASE_URL` | la cadena *pooled* de Neon, completa |
-| `NODE_ENV` | `production` |
-| `CORS_ORIGINS` | `*` |
-
-`CORS_ORIGINS=*` permite que cualquier página llame a la API. Para una entrega
-académica está bien y facilita las pruebas; si esto fuera un sistema real,
-habría que poner el dominio concreto del frontend.
-
-### 2.4 Desplegar y probar
-
-Dale **Deploy** y espera. Cuando termine:
-
-- `https://tu-proyecto.vercel.app/` → la portada con la lista de recursos
-- `https://tu-proyecto.vercel.app/api/health` → debe decir `"baseDeDatos": "conectada"`
-- `https://tu-proyecto.vercel.app/api/productos` → los ocho productos
-
-Y la prueba completa contra el despliegue, desde tu terminal:
+Antes del `push`, comprueba que el `.env` **no** vaya incluido:
 
 ```bash
-API_URL=https://tu-proyecto.vercel.app npm run test:api
+git ls-files | grep env
 ```
 
-En PowerShell la variable se pasa distinto:
+Debe devolver `.env.example` y `src/config/env.js`, y nada más. Si aparece
+`.env` a secas, ahí va la contraseña de tu base de datos: sácalo del índice
+(`git rm --cached .env`) antes de subir nada. Una contraseña que entra al
+historial de Git se queda ahí aunque borres el archivo después.
+
+---
+
+## Parte 2 — Crear el proyecto en Vercel
+
+1. <https://vercel.com> → **Add New → Project**
+2. Importa el repositorio
+3. Vercel detecta *Express* solo. **No toques nada más**: ni Build Command, ni
+   Output Directory, ni Root Directory (la API está en la raíz del repo).
+4. **No agregues variables de entorno todavía.** Si Vercel te ofrece importar
+   tu `.env` local, dile que no: esas variables apuntan a `localhost`, que
+   desde un servidor de Vercel no existe, y además le bloquean el paso a la
+   integración de la base de datos.
+5. **Deploy**
+
+Al terminar, abre la URL. La portada responde. `/api/health` dirá
+`"sin conexión"`, que es lo esperado en este punto.
+
+---
+
+## Parte 3 — La base de datos, desde Vercel
+
+No hace falta crear cuenta en Neon: se provisiona desde el propio Vercel y las
+credenciales se inyectan solas en el proyecto.
+
+1. Dentro del proyecto → pestaña **Storage** (*Almacenamiento*)
+2. **Create Database** → **Neon — Serverless Postgres**
+3. Región: la más cercana a Colombia (`us-east-1` o `us-east-2`)
+4. Entornos: *Production* y *Preview*
+5. **Prefijo personalizado: déjalo VACÍO.** Si le pones uno, la variable se
+   llamaría `MIPREFIJO_DATABASE_URL` y el código busca `DATABASE_URL` a secas.
+6. **Connect**
+
+Si se queja de que ya existe una variable con ese nombre, es por el punto 4 de
+la parte 2: ve a *Settings → Environments → Production → Environment Variables*
+y borra las `PG*`, `PORT` y `NODE_ENV`. Deja `CORS_ORIGINS`.
+
+Para confirmar que quedó: en esa misma pantalla debe aparecer `DATABASE_URL`.
+
+---
+
+## Parte 4 — Crear las tablas
+
+La base existe pero está vacía. En la nube no hay pgAdmin para abrir el `.sql`
+y darle *ejecutar*, así que se manda desde tu equipo.
+
+**1.** En Vercel, en la pantalla de la base Neon, sección *Inicio rápido*, dale
+a **Mostrar secreto** y copia el valor de `DATABASE_URL` — la primera, la que
+dice *"Recommended for most uses"*. Lleva `-pooler` en el nombre del servidor:
+esa reparte las conexiones y evita el error `too many connections`.
+
+**2.** Agrégala a tu `.env` local. No hace falta comentar las variables `PG*`:
+si `DATABASE_URL` existe, el código la usa y se olvida de las demás.
 
 ```powershell
-$env:API_URL="https://tu-proyecto.vercel.app"; npm run test:api
+Add-Content .env ""
+Add-Content .env 'DATABASE_URL=PEGA_AQUI'
 ```
 
-Si pasan las 62, la entrega está lista.
+Las **comillas simples** importan: las contraseñas de Neon a veces traen un
+`$`, y con comillas dobles PowerShell lo interpreta como el inicio de una
+variable y corta la cadena.
+
+**3.** Crea las tablas:
+
+```powershell
+npm run db:setup
+```
+
+Lo primero que imprime es la línea `Destino:`. **Léela antes de seguir**: tiene
+que decir `neon.tech`. Si dice `localhost`, la variable no quedó bien pegada y
+estarías borrando tu base local por error.
+
+Debe terminar con 5 categorías, 4 proveedores, 5 clientes y 8 productos.
+
+---
+
+## Parte 5 — Volver a desplegar y comprobar
+
+Las variables de entorno se leen **al desplegar**, y `DATABASE_URL` no existía
+cuando se desplegó. Así que hay que repetir el despliegue:
+
+*Deployments* → abre el último → `···` → **Redeploy**
+
+(Un `git push` también sirve: dispara un despliegue nuevo por su cuenta.)
+
+Y la comprobación completa, desde tu terminal:
+
+```powershell
+$env:API_URL="https://api-proyecto-formativo.vercel.app"
+npm run test:api
+```
+
+Son **70 comprobaciones** contra el servidor desplegado: crea, edita y borra
+registros de verdad en Neon. Si terminan en 70/0, el despliegue está completo.
 
 ---
 
@@ -150,20 +159,41 @@ función cuando nadie la usa y la primera petición la enciende; Neon suspende l
 base por inactividad y la primera consulta la despierta. Juntas pueden ser
 varios segundos.
 
-**Abre `/api/health` cinco minutos antes de sustentar** y todo lo demás
-responde al instante.
+**Abre `/docs` cinco minutos antes** y todo lo demás responde al instante.
 
-**Ten a mano estas tres pestañas:**
+**Qué mostrar, en este orden:**
 
-1. `https://tu-proyecto.vercel.app/api/productos` — se ve el JSON con el JOIN
-   resuelto, mostrando el nombre de la categoría y del proveedor.
-2. `https://tu-proyecto.vercel.app/api/productos?stockBajo=1` — un filtro real
-   funcionando.
-3. `https://tu-proyecto.vercel.app/api/productos/999999` — el 404 con su
-   mensaje, para mostrar que los errores están manejados.
+1. **`/docs`** — la documentación interactiva. Se ven las 21 operaciones
+   agrupadas por entidad. Es lo que da la primera impresión.
+2. **`POST /api/productos`** desde ahí mismo: *Try it out*, ajustas el JSON,
+   *Execute*. Sale el `201` con el producto creado y el id que asignó la base.
+3. **`GET /api/productos`** — se ve el `JOIN` resuelto: cada producto trae el
+   nombre de su categoría y su proveedor, no solo los ids.
+4. **`DELETE /api/categorias/1`** — devuelve `409` explicando que la categoría
+   tiene productos asociados. Sirve para mostrar que la integridad referencial
+   está cuidada y que los errores se explican con palabras.
+5. **`npm run test:api`** apuntando al despliegue, si piden ver todo junto.
 
-Y si te piden ver las operaciones de escritura, `npm run test:api` apuntando al
-despliegue las recorre todas en vivo, incluidos los casos que deben fallar.
+**Ten a mano el registro del servidor** (`npm run dev` en local mientras corre
+la suite): muestra las 20 operaciones con sus códigos HTTP y tiempos de
+respuesta en una sola pantalla.
+
+---
+
+## Mantenimiento
+
+**Actualizar la API.** Cada `git push` a `main` despliega solo. No hay que
+tocar nada en Vercel.
+
+**Cambiar una variable de entorno.** Vercel **no** vuelve a desplegar solo
+después de cambiarla: hay que pedir *Redeploy* a mano.
+
+**Volver a trabajar contra tu base local.** Quita la línea `DATABASE_URL` del
+`.env` (o coméntala con `#` delante). Las variables `PG*` vuelven a mandar.
+
+**Rotar la contraseña de la base.** En Neon: *Roles* → el usuario →
+*Reset password*. Como Vercel administra esa variable, allá se actualiza sola;
+en tu `.env` local hay que pegar la nueva a mano.
 
 ---
 
@@ -171,11 +201,10 @@ despliegue las recorre todas en vivo, incluidos los casos que deben fallar.
 
 | Síntoma | Causa casi siempre | Solución |
 |---|---|---|
-| `404: NOT_FOUND` al abrir la URL | Vercel no encontró el punto de entrada | Confirma que `src/server.js` existe y que el repositorio subió completo |
-| `"baseDeDatos": "sin conexión"` | `DATABASE_URL` mal copiada o sin `?sslmode=require` | Vuelve a copiarla de Neon, completa |
-| `too many connections` | usaste la cadena **sin** `-pooler` | Cámbiala por la *Pooled connection* |
-| La API responde pero las tablas no existen | no corriste `npm run db:setup` contra Neon | Parte 1.2 |
-| Cambié una variable y sigue igual | las variables se leen al desplegar | Deployments → ⋯ → *Redeploy* |
-
-Un detalle de Vercel: cambiar una variable de entorno **no** vuelve a desplegar
-solo. Siempre hay que pedir *Redeploy* después.
+| `404: NOT_FOUND` al abrir la URL | Vercel no encontró el punto de entrada | Confirma que `src/server.js` está en el repositorio |
+| Una ruta nueva devuelve 404 pero las viejas funcionan | el despliegue aún no termina | espera a que el estado sea *Ready* y recarga con Ctrl+F5 |
+| `"baseDeDatos": "sin conexión"` | falta `DATABASE_URL`, o no se hizo *Redeploy* tras agregarla | partes 3 y 5 |
+| `too many connections` | se usó la cadena **sin** `-pooler` | cámbiala por la *Pooled connection* |
+| La API responde pero las tablas no existen | no se corrió `npm run db:setup` contra Neon | parte 4 |
+| `/docs` se queda en "Cargando la documentación…" | el CDN de Swagger no cargó | revisa la consola del navegador (F12); abre `/api/openapi.json` para confirmar que la especificación sí está |
+| Cambié una variable y sigue igual | las variables se leen al desplegar | *Redeploy* |
