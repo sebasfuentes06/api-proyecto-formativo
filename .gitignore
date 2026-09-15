@@ -1,0 +1,21 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno: aquí va la contraseña de la base de datos.
+# Nunca se suben al repositorio.
+.env
+.env.*
+!.env.example
+
+# Registros y temporales
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+
+# Vercel
+.vercel/

@@ -1,0 +1,26 @@
+{
+  "name": "api-proyecto-formativo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "API REST del proyecto formativo Essence Don Aire: CRUD de categorías, proveedores, clientes y productos con Node, Express y PostgreSQL",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "db:setup": "node scripts/setup-db.js",
+    "db:seed": "node scripts/setup-db.js --solo-datos",
+    "test:api": "node scripts/probar-api.js"
+  },
+  "keywords": ["api", "rest", "express", "postgresql", "crud", "sena"],
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.22.3",
+    "morgan": "^1.12.1",
+    "pg": "^8.13.1"
+  }
+}

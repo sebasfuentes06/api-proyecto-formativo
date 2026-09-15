@@ -1,0 +1,45 @@
+import { Router } from "express";
+import { pool } from "../db/pool.js";
+import { asyncHandler } from "../middlewares/errores.js";
+import categorias from "./categorias.routes.js";
+import proveedores from "./proveedores.routes.js";
+import clientes from "./clientes.routes.js";
+import productos from "./productos.routes.js";
+
+/**
+ * Punto donde se juntan todas las rutas de la API.
+ *
+ * Tener este archivo evita que app.js crezca: para agregar una entidad nueva
+ * se crea su archivo de rutas y se registra aquí, en una línea.
+ */
+const router = Router();
+
+/**
+ * Estado de la API y de la base de datos.
+ * Es la primera URL que hay que abrir cuando algo no funciona: dice si el
+ * problema es la API o la conexión a PostgreSQL.
+ */
+router.get(
+  "/health",
+  asyncHandler(async (_req, res) => {
+    try {
+      const inicio = Date.now();
+      await pool.query("SELECT 1");
+      res.json({
+        ok: true,
+        api: "en línea",
+        baseDeDatos: "conectada",
+        tiempoRespuestaMs: Date.now() - inicio
+      });
+    } catch (error) {
+      res.status(503).json({ ok: false, api: "en línea", baseDeDatos: "sin conexión", error: error.message });
+    }
+  })
+);
+
+router.use("/categorias", categorias);
+router.use("/proveedores", proveedores);
+router.use("/clientes", clientes);
+router.use("/productos", productos);
+
+export default router;

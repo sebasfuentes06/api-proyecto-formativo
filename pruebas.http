@@ -1,0 +1,268 @@
+###############################################################
+# API Proyecto Formativo - Essence Don Aire
+# Colección de pruebas manuales
+#
+# Cómo usarla:
+#   VS Code -> instalar la extensión "REST Client" (humao.rest-client)
+#   y darle clic a "Send Request" encima de cada bloque.
+#
+# Para probar contra el despliegue, cambia @host por la URL de Vercel.
+###############################################################
+
+@host = http://localhost:3000
+# @host = https://tu-api.vercel.app
+
+
+###############################################################
+# ESTADO DEL SERVICIO
+###############################################################
+
+### Portada: lista los recursos disponibles
+GET {{host}}/
+
+### Estado de la API y de la base de datos
+GET {{host}}/api/health
+
+
+###############################################################
+# CATEGORÍAS
+###############################################################
+
+### Listar todas
+GET {{host}}/api/categorias
+
+### Listar solo las activas, ordenadas por nombre
+GET {{host}}/api/categorias?status=active&sortBy=nombre&sortDir=asc
+
+### Buscar
+GET {{host}}/api/categorias?search=floral
+
+### Obtener una por id
+GET {{host}}/api/categorias/1
+
+### Crear
+POST {{host}}/api/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Gourmand",
+  "descripcion": "Notas dulces: caramelo, chocolate, café",
+  "estado": true
+}
+
+### Actualizar
+PUT {{host}}/api/categorias/1
+Content-Type: application/json
+
+{
+  "descripcion": "Fragancias florales de temporada"
+}
+
+### Eliminar
+DELETE {{host}}/api/categorias/6
+
+
+###############################################################
+# PROVEEDORES
+###############################################################
+
+### Listar
+GET {{host}}/api/proveedores
+
+### Filtrar por ciudad
+GET {{host}}/api/proveedores?ciudad=Medellín
+
+### Obtener uno
+GET {{host}}/api/proveedores/1
+
+### Crear
+POST {{host}}/api/proveedores
+Content-Type: application/json
+
+{
+  "nombre": "Fragancias del Norte S.A.S.",
+  "contacto": "Diana Álvarez",
+  "email": "ventas@fragnorte.com",
+  "telefono": "+57 605 111 2233",
+  "ciudad": "Santa Marta",
+  "calificacion": 4.3
+}
+
+### Actualizar
+PUT {{host}}/api/proveedores/1
+Content-Type: application/json
+
+{
+  "calificacion": 4.8,
+  "ciudad": "Rionegro"
+}
+
+### Eliminar
+DELETE {{host}}/api/proveedores/5
+
+
+###############################################################
+# CLIENTES
+###############################################################
+
+### Listar
+GET {{host}}/api/clientes
+
+### Buscar por nombre o correo
+GET {{host}}/api/clientes?search=laura
+
+### Obtener uno
+GET {{host}}/api/clientes/1
+
+### Crear
+POST {{host}}/api/clientes
+Content-Type: application/json
+
+{
+  "nombre": "Camila Arango Pérez",
+  "correo": "camila.arango@correo.com",
+  "telefono": "+57 305 666 7788",
+  "direccion": "Carrera 43A #18-20",
+  "ciudad": "Medellín"
+}
+
+### Actualizar
+PUT {{host}}/api/clientes/1
+Content-Type: application/json
+
+{
+  "telefono": "+57 300 999 8877",
+  "ciudad": "Envigado"
+}
+
+### Desactivar (sin borrar)
+PUT {{host}}/api/clientes/1
+Content-Type: application/json
+
+{
+  "estado": false
+}
+
+### Eliminar
+DELETE {{host}}/api/clientes/6
+
+
+###############################################################
+# PRODUCTOS
+###############################################################
+
+### Listar (trae el nombre de la categoría y del proveedor)
+GET {{host}}/api/productos
+
+### Solo los que están en stock bajo
+GET {{host}}/api/productos?stockBajo=1
+
+### Filtrar por categoría
+GET {{host}}/api/productos?categoria=1
+
+### Ordenar por precio, de mayor a menor
+GET {{host}}/api/productos?sortBy=precio&sortDir=desc
+
+### Paginar
+GET {{host}}/api/productos?page=2&limit=3
+
+### Obtener uno
+GET {{host}}/api/productos/1
+
+### Crear
+POST {{host}}/api/productos
+Content-Type: application/json
+
+{
+  "sku": "GOU-CAR-009",
+  "nombre": "Caramelo Salado",
+  "descripcion": "Gourmand dulce con caramelo y sal marina",
+  "id_categoria": 1,
+  "id_proveedor": 1,
+  "precio": 175000,
+  "stock": 20,
+  "stock_minimo": 8,
+  "estado": true
+}
+
+### Actualizar
+PUT {{host}}/api/productos/1
+Content-Type: application/json
+
+{
+  "precio": 195000,
+  "stock": 35
+}
+
+### Eliminar
+DELETE {{host}}/api/productos/9
+
+
+###############################################################
+# CASOS QUE DEBEN FALLAR
+# Sirven para mostrar que la API valida y no se cae.
+###############################################################
+
+### 400 - categoría sin nombre
+POST {{host}}/api/categorias
+Content-Type: application/json
+
+{
+  "descripcion": "Esta categoría no tiene nombre"
+}
+
+### 400 - correo con formato inválido
+POST {{host}}/api/clientes
+Content-Type: application/json
+
+{
+  "nombre": "Alguien",
+  "correo": "esto-no-es-un-correo"
+}
+
+### 400 - precio negativo
+POST {{host}}/api/productos
+Content-Type: application/json
+
+{
+  "sku": "ERR-001",
+  "nombre": "Producto con precio negativo",
+  "id_categoria": 1,
+  "id_proveedor": 1,
+  "precio": -50000
+}
+
+### 400 - la categoría no existe
+POST {{host}}/api/productos
+Content-Type: application/json
+
+{
+  "sku": "ERR-002",
+  "nombre": "Producto huérfano",
+  "id_categoria": 999999,
+  "id_proveedor": 1,
+  "precio": 10000
+}
+
+### 409 - nombre de categoría repetido
+POST {{host}}/api/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Floral"
+}
+
+### 409 - eliminar una categoría que tiene productos
+DELETE {{host}}/api/categorias/1
+
+### 404 - id que no existe
+GET {{host}}/api/productos/999999
+
+### 400 - id que no es un número
+GET {{host}}/api/productos/abc
+
+### 404 - ruta que no existe
+GET {{host}}/api/inventado
+
+### 200 - intento de inyección SQL por sortBy (se ignora)
+GET {{host}}/api/productos?sortBy=nombre;DROP TABLE productos;--

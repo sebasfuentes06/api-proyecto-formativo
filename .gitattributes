@@ -1,0 +1,17 @@
+# Normaliza los finales de línea.
+#
+# Windows usa CRLF y Linux usa LF. Sin este archivo, Git avisa en cada
+# commit y, peor, un archivo editado en Windows aparece como "cambiado
+# entero" cuando lo abre alguien en Linux, aunque no se haya tocado nada.
+#
+# text=auto eol=lf: en el repositorio todo se guarda con LF, sin importar
+# en qué sistema se editó. Es lo que espera el servidor donde se despliega.
+* text=auto eol=lf
+
+# Estos son binarios: Git no debe tocarlos.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
