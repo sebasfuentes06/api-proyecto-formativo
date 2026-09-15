@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../middlewares/errores.js";
+import { construirEspecificacion } from "../docs/openapi.js";
 import categorias from "./categorias.routes.js";
 import proveedores from "./proveedores.routes.js";
 import clientes from "./clientes.routes.js";
@@ -36,6 +37,18 @@ router.get(
     }
   })
 );
+
+/**
+ * Especificación OpenAPI en JSON.
+ *
+ * La URL del servidor se arma con los datos de la petición, no con una
+ * constante: así el botón "Try it out" apunta al sitio correcto tanto en
+ * localhost como en el despliegue, sin tener que configurar nada.
+ */
+router.get("/openapi.json", (req, res) => {
+  const protocolo = req.headers["x-forwarded-proto"] ?? req.protocol;
+  res.json(construirEspecificacion({ url: `${protocolo}://${req.get("host")}` }));
+});
 
 router.use("/categorias", categorias);
 router.use("/proveedores", proveedores);

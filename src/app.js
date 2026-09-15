@@ -3,6 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import { env } from "./config/env.js";
 import rutas from "./routes/index.js";
+import { paginaDocumentacion } from "./docs/pagina.js";
 import { noEncontrado, manejadorErrores } from "./middlewares/errores.js";
 
 /**
@@ -31,12 +32,20 @@ app.use(morgan(env.entorno === "production" ? "combined" : "dev"));
 // 3. Lectura del cuerpo JSON. Sin esto, req.body llega vacío en los POST.
 app.use(express.json());
 
-// 4. Portada. Abrir la raíz en el navegador debe decir algo útil, no un 404.
+// 4. Documentación interactiva. Es la única ruta que devuelve HTML en vez de
+//    JSON: es la cara visible de la API, pensada para personas.
+app.get("/docs", (_req, res) => {
+  res.type("html").send(paginaDocumentacion("/api/openapi.json"));
+});
+
+// 5. Portada. Abrir la raíz en el navegador debe decir algo útil, no un 404.
 app.get("/", (_req, res) => {
   res.json({
     nombre: "API Proyecto Formativo - Essence Don Aire",
     version: "1.0.0",
     descripcion: "API REST con operaciones CRUD sobre categorías, proveedores, clientes y productos.",
+    documentacion: "/docs",
+    especificacion: "/api/openapi.json",
     estado: "/api/health",
     recursos: {
       categorias: "/api/categorias",
@@ -47,10 +56,10 @@ app.get("/", (_req, res) => {
   });
 });
 
-// 5. Las rutas de la API, todas bajo /api.
+// 6. Las rutas de la API, todas bajo /api.
 app.use("/api", rutas);
 
-// 6. Cierre: primero el 404, después el manejador de errores.
+// 7. Cierre: primero el 404, después el manejador de errores.
 //    Van al final a propósito: si estuvieran arriba, atraparían todo.
 app.use(noEncontrado);
 app.use(manejadorErrores);

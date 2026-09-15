@@ -54,7 +54,7 @@ Queda en <http://localhost:3000>. Para comprobarlo, abre
 | `npm start` | La levanta sin recarga automática |
 | `npm run db:setup` | Crea las tablas y carga los datos de ejemplo |
 | `npm run db:seed` | Recarga solo los datos, sin tocar las tablas |
-| `npm run test:api` | Corre 62 pruebas automáticas contra la API |
+| `npm run test:api` | Corre 70 pruebas automáticas contra la API |
 
 ---
 
@@ -72,6 +72,7 @@ src/
 ├── routes/                Qué URL llama a qué controlador
 ├── middlewares/           Validación y manejo de errores
 ├── validaciones/          Reglas de cada entidad
+├── docs/                  Especificación OpenAPI y página de Swagger UI
 ├── utils/                 Paginación, orden, filtros
 ├── app.js                 Arma la aplicación Express
 └── server.js              La arranca
@@ -154,12 +155,22 @@ dónde se guarda la misma información.
 
 Base: `/api`
 
-### Sistema
+### Sistema y documentación
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | `GET` | `/` | Portada con la lista de recursos |
+| `GET` | `/docs` | **Documentación interactiva** (Swagger UI) |
+| `GET` | `/api/openapi.json` | Especificación OpenAPI 3.0 de toda la API |
 | `GET` | `/api/health` | Estado de la API y de la base de datos |
+
+`/docs` es la única ruta que devuelve HTML: lista las 21 operaciones, permite
+probarlas desde el navegador con **Try it out**, y muestra la respuesta real.
+Es la cara visible de la API, la que se enseña en una sustentación.
+
+`/api/openapi.json` es esa misma información en el formato estándar OpenAPI.
+Sirve para importar toda la colección en Postman o Insomnia de un solo golpe:
+*Import → Link* y esa URL.
 
 ### Las cuatro entidades
 
@@ -297,14 +308,20 @@ npm run test:api
 ```
 
 Recorre las 20 operaciones, los casos que deben fallar (datos inválidos, ids
-inexistentes, valores repetidos, borrados que romperían una relación) y los
-filtros. Son **62 comprobaciones** y termina con el conteo.
+inexistentes, valores repetidos, borrados que romperían una relación), los
+filtros y la documentación. Son **70 comprobaciones** y termina con el conteo.
 
 Para probar el despliegue en lugar de tu equipo:
 
 ```bash
 API_URL=https://tu-api.vercel.app npm run test:api
 ```
+
+### Desde el navegador
+
+Abre **`/docs`**. Es la forma más cómoda de recorrer la API sin instalar nada:
+se despliega cada operación, se edita el cuerpo de la petición y se ejecuta
+contra el servidor de verdad.
 
 ### Pruebas manuales
 
@@ -338,6 +355,12 @@ desactualizan en cuanto alguien crea o borra un producto.
 
 **Validación propia, sin librerías.** Se puede leer de arriba abajo y no
 agrega una dependencia más que explicar.
+
+**Swagger UI desde un CDN, no como dependencia.** No es por ahorrar un
+paquete: en un despliegue serverless, Express no sirve archivos estáticos, así
+que `swagger-ui-express` cargaría la página sin estilos ni JavaScript. Trayendo
+la interfaz del CDN y sirviendo solo la especificación desde la API, funciona
+igual en local que desplegada.
 
 **La misma aplicación corre local y desplegada.** `server.js` exporta la app y
 solo abre un puerto cuando no está en un entorno serverless. No hay una versión

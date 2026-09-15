@@ -117,6 +117,28 @@ async function main() {
   const portada = await pedir("GET", "/");
   comprobar("la portada lista los recursos", portada.estado === 200 && !!portada.cuerpo?.recursos);
 
+  titulo("Documentación");
+  const spec = await pedir("GET", "/api/openapi.json");
+  comprobar("/api/openapi.json responde 200", spec.estado === 200);
+  comprobar("es una especificación OpenAPI 3", String(spec.cuerpo?.openapi ?? "").startsWith("3."));
+  const operaciones = Object.values(spec.cuerpo?.paths ?? {}).reduce(
+    (total, ruta) => total + Object.keys(ruta).length,
+    0
+  );
+  comprobar("describe las 21 operaciones", operaciones === 21, `describe ${operaciones}`);
+  comprobar(
+    "el servidor de la spec apunta a esta API",
+    spec.cuerpo?.servers?.[0]?.url === BASE,
+    `${spec.cuerpo?.servers?.[0]?.url} != ${BASE}`
+  );
+
+  const docs = await fetch(`${BASE}/docs`);
+  const html = await docs.text();
+  comprobar("/docs responde 200", docs.status === 200);
+  comprobar("/docs devuelve HTML", (docs.headers.get("content-type") ?? "").includes("text/html"));
+  comprobar("/docs carga Swagger UI", html.includes("swagger-ui-bundle.js"));
+  comprobar("/docs apunta a la especificación", html.includes("/api/openapi.json"));
+
   // Marca de tiempo para que los datos de prueba no choquen con los de una
   // corrida anterior (los correos y los SKU no se pueden repetir).
   const marca = Date.now().toString().slice(-6);
