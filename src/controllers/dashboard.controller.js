@@ -15,7 +15,7 @@ const resumen = asyncHandler(async (req, res) => {
   const valores = soloMio ? [req.usuario.id] : [];
   const deV = soloMio ? "AND v.id_usuario = $1" : "";
 
-  const [ventas, cartera, pedidos, stock, top] = await Promise.all([
+  const [ventas, cartera, pedidos, stock, top, solicitudes] = await Promise.all([
     query(
       `SELECT
          COALESCE(SUM(total) FILTER (WHERE fecha_local(fecha)::DATE = hoy_local()), 0) AS hoy,
@@ -39,7 +39,11 @@ const resumen = asyncHandler(async (req, res) => {
         WHERE v.estado = 'confirmada' AND date_trunc('month', fecha_local(v.fecha)) = date_trunc('month', hoy_local()) ${deV}
         GROUP BY p.id_producto, p.nombre ORDER BY unidades DESC LIMIT 5`,
       valores
-    )
+    ),
+    // Solicitudes de registro esperando aprobación (solo le importan al Administrador).
+    soloMio
+      ? Promise.resolve({ rows: [{ n: 0 }] })
+      : query("SELECT COUNT(*)::INT AS n FROM usuarios WHERE aprobacion = 'pendiente'")
   ]);
   res.json({
     ok: true,
@@ -53,7 +57,8 @@ const resumen = asyncHandler(async (req, res) => {
       ventas_con_saldo: cartera.rows[0].ventas,
       pedidos_pendientes: pedidos.rows[0].pendientes,
       stock_bajo: stock.rows[0].bajo,
-      mas_vendidos: top.rows
+      mas_vendidos: top.rows,
+      solicitudes_pendientes: solicitudes.rows[0].n
     }
   });
 });

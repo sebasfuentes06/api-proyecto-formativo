@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
+import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
@@ -35,6 +36,9 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
   bool _verClave = false;
 
   bool get _editando => widget.usuario != null;
+
+  /// Solicitud que llegó desde "Regístrate" y aún no está aprobada.
+  bool get _esSolicitud => widget.usuario != null && widget.usuario!.aprobacion != 'aprobado';
   bool get _soyYo => widget.usuario?.id == Sesion.i.usuario?.id;
 
   @override
@@ -96,6 +100,82 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _aprobar() async {
+    final u = widget.usuario!;
+    final ok = await confirmar(
+      context,
+      titulo: 'Aprobar solicitud',
+      mensaje: '${u.nombre} podrá entrar a la app con el rol $_rol. Le avisaremos por correo.',
+      textoOk: 'Aprobar',
+    );
+    if (!ok || !mounted) return;
+    final r = await conCarga(context, Api.i.post('/api/usuarios/${u.id}/aprobar', {'rol': _rol}));
+    if (r == null || !mounted) return;
+    mostrarMensaje(context, r['mensaje'] ?? 'Solicitud aprobada.');
+    Navigator.pop(context);
+  }
+
+  Future<void> _rechazar() async {
+    final u = widget.usuario!;
+    final motivo = await pedirTexto(
+      context,
+      titulo: 'Rechazar solicitud',
+      etiqueta: 'Motivo (le llega por correo)',
+      ayuda: '${u.nombre} no podrá entrar a la app.',
+      textoOk: 'Rechazar',
+      peligro: true,
+    );
+    if (motivo == null || !mounted) return;
+    final r = await conCarga(context, Api.i.post('/api/usuarios/${u.id}/rechazar', {'motivo': motivo}));
+    if (r == null || !mounted) return;
+    mostrarMensaje(context, r['mensaje'] ?? 'Solicitud rechazada.');
+    Navigator.pop(context);
+  }
+
+  /// Datos de la solicitud y botones Aprobar / Rechazar.
+  Widget _tarjetaSolicitud() {
+    final u = widget.usuario!;
+    final tema = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: u.rechazado ? tema.colorScheme.errorContainer : tema.colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Icon(u.rechazado ? Icons.block : Icons.how_to_reg),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(u.rechazado ? 'Solicitud rechazada' : 'Solicitud de registro', style: tema.textTheme.titleMedium),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text('Se registró: ${fechaHora(u.creadoEn)}'),
+          if (u.telefono != null) Text('Teléfono: ${u.telefono}'),
+          if (u.rechazado && u.motivoRechazo != null) Text('Motivo: ${u.motivoRechazo}'),
+          const SizedBox(height: 8),
+          Text('Elige el rol arriba y apruébala. Por defecto entra como Cliente con la ficha que se creó al registrarse.',
+              style: tema.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          Row(children: [
+            if (!u.rechazado)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _rechazar,
+                  icon: const Icon(Icons.close),
+                  label: const Text('Rechazar'),
+                ),
+              ),
+            if (!u.rechazado) const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(onPressed: _aprobar, icon: const Icon(Icons.check), label: Text('Aprobar como $_rol')),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _restablecerClave() async {
     final nueva = await pedirTexto(
       context,
@@ -114,10 +194,11 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
   Widget build(BuildContext context) {
     const espacio = SizedBox(height: 14);
     return Scaffold(
-      appBar: AppBar(title: Text(_editando ? 'Editar usuario' : 'Nuevo usuario')),
+      appBar: AppBar(title: Text(_esSolicitud ? 'Revisar solicitud' : (_editando ? 'Editar usuario' : 'Nuevo usuario'))),
       body: Form(
         key: _form,
         child: ListView(padding: const EdgeInsets.all(16), children: [
+          if (_esSolicitud) _tarjetaSolicitud(),
           const Text('Rol'),
           const SizedBox(height: 8),
           SegmentedButton<String>(
@@ -138,7 +219,8 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
             },
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline),
           ),
-          if (_rol == Rol.cliente) ...[
+          // En una solicitud la ficha ya existe (se creó al registrarse).
+          if (_rol == Rol.cliente && !_esSolicitud) ...[
             espacio,
             Card(
               margin: EdgeInsets.zero,
@@ -154,6 +236,7 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
           espacio,
           TextFormField(
             controller: _nombre,
+            readOnly: _esSolicitud,
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(labelText: 'Nombre *', prefixIcon: Icon(Icons.person_outline)),
             validator: (v) => (v ?? '').trim().length < 3 ? 'Escribe el nombre' : null,
@@ -161,6 +244,7 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
           espacio,
           TextFormField(
             controller: _correo,
+            readOnly: _esSolicitud,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(labelText: 'Correo (con el que entra) *', prefixIcon: Icon(Icons.mail_outline)),
             validator: (v) => RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v ?? '').trim()) ? null : 'Correo no válido',
@@ -181,7 +265,7 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
               validator: (v) => (v ?? '').length < 8 ? 'Mínimo 8 caracteres' : null,
             ),
           ],
-          if (_editando) ...[
+          if (_editando && !_esSolicitud) ...[
             espacio,
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -193,6 +277,7 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
             OutlinedButton.icon(onPressed: _restablecerClave, icon: const Icon(Icons.key), label: const Text('Restablecer contraseña')),
           ],
           const SizedBox(height: 20),
+          if (!_esSolicitud)
           FilledButton.icon(
             onPressed: _guardar,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),

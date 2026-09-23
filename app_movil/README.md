@@ -29,6 +29,19 @@ Los usuarios se gestionan en **avatar ▸ Usuarios y roles**. Para darle acceso 
 un cliente: ficha del cliente ▸ ⋮ ▸ *Dar acceso a la app*. La API valida cada
 permiso: ocultar un botón en la app es comodidad, no la única protección.
 
+## Registro y recuperación de contraseña
+
+- **Regístrate** (en el login): nombre, documento, celular, dirección, ciudad,
+  correo, contraseña y aceptación de datos personales. La cuenta queda
+  **pendiente**; al administrador le llega un correo y un aviso en la pestaña
+  Ventas. La aprueba (eligiendo el rol) o la rechaza en **avatar ▸ Usuarios y
+  roles ▸ Pendientes**, y a la persona le llega el correo con la respuesta.
+- **¿Olvidaste tu contraseña?**: llega un **código de 6 dígitos** al correo
+  registrado; se escribe en la app junto con la contraseña nueva. Vence en 15
+  minutos y se invalida tras 5 intentos fallidos.
+
+El envío de correos se configura en Vercel (ver `DESPLIEGUE.md`, parte 7).
+
 ## Primera vez
 
 Dentro de esta carpeta (`app_movil`):

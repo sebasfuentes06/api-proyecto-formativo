@@ -141,8 +141,8 @@ async function main() {
     (total, ruta) => total + Object.keys(ruta).length,
     0
   );
-  // 21 del CRUD base + 27 del proceso de ventas + 4 de usuarios.
-  comprobar("describe las 52 operaciones", operaciones === 52, `describe ${operaciones}`);
+  // 21 del CRUD base + 27 del proceso de ventas + 6 de usuarios + 3 de registro/recuperación.
+  comprobar("describe las 57 operaciones", operaciones === 57, `describe ${operaciones}`);
   comprobar(
     "el servidor de la spec apunta a esta API",
     spec.cuerpo?.servers?.[0]?.url === BASE,

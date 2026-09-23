@@ -35,6 +35,30 @@ const pathsMovil = {
       responses: { 200: ok("Token JWT y datos del usuario"), 401: errores[401] }
     }
   },
+  "/api/auth/registro": {
+    post: {
+      tags: ["Sesión"], summary: "Registrarse (queda pendiente de aprobación)",
+      description: "Crea la cuenta como Cliente pendiente y su ficha de cliente inactiva. Avisa por correo al usuario y a los administradores. No puede entrar hasta que el Administrador la apruebe.",
+      requestBody: cuerpo({ nombre: "Ana Gómez", correo: "ana@correo.com", telefono: "3001234567", direccion: "Calle 5 # 3-10", ciudad: "La Pintada", password: "MiClave2026", acepta_datos: true }),
+      responses: { 201: ok("Solicitud enviada"), 400: errores[400], 409: { description: "Ya existe una cuenta o solicitud con ese correo" } }
+    }
+  },
+  "/api/auth/olvide": {
+    post: {
+      tags: ["Sesión"], summary: "Olvidé mi contraseña: enviar código al correo",
+      description: "Envía un código de 6 dígitos (vence en 15 minutos). Responde igual exista o no el correo, para no revelar quién tiene cuenta. Máximo un código por minuto.",
+      requestBody: cuerpo({ correo: "ana@correo.com" }),
+      responses: { 200: ok("Código enviado si la cuenta existe"), 429: { description: "Espera antes de pedir otro" }, 503: { description: "Correo sin configurar" } }
+    }
+  },
+  "/api/auth/restablecer": {
+    post: {
+      tags: ["Sesión"], summary: "Restablecer contraseña con el código",
+      description: "El código sirve una vez; tras 5 intentos fallidos se invalida.",
+      requestBody: cuerpo({ correo: "ana@correo.com", codigo: "482915", nueva: "OtraClave2026" }),
+      responses: { 200: ok("Contraseña actualizada"), 400: errores[400] }
+    }
+  },
   "/api/auth/yo": { get: { tags: ["Sesión"], summary: "Usuario de la sesión actual", security: SESION, responses: { 200: ok("Usuario"), 401: errores[401] } } },
   "/api/auth/password": {
     put: { tags: ["Sesión"], summary: "Cambiar la contraseña propia", security: SESION, requestBody: cuerpo({ actual: "Essence2026*", nueva: "OtraClave2026" }), responses: { 200: ok("Actualizada"), 400: errores[400] } }
@@ -105,7 +129,7 @@ const pathsMovil = {
     delete: { tags: ["Productos"], summary: "Quitar la foto", security: SESION, parameters: [ID], responses: { 200: ok("Eliminada"), 404: errores[404] } }
   },
   "/api/usuarios": {
-    get: { tags: ["Usuarios"], summary: "Listar usuarios", security: SESION, parameters: [q("search", "Nombre o correo"), q("rol", "Administrador | Vendedor | Cliente"), q("status", "active | inactive")], responses: { 200: ok("Listado"), 403: { description: "Solo Administrador" } } },
+    get: { tags: ["Usuarios"], summary: "Listar usuarios y solicitudes", security: SESION, parameters: [q("search", "Nombre o correo"), q("rol", "Administrador | Vendedor | Cliente"), q("status", "active | inactive"), q("aprobacion", "pendiente | aprobado | rechazado")], responses: { 200: ok("Listado"), 403: { description: "Solo Administrador" } } },
     post: {
       tags: ["Usuarios"], summary: "Crear usuario", security: SESION,
       description: "Un usuario con rol Cliente debe llevar id_cliente (su ficha). Una ficha tiene como máximo un usuario.",
@@ -120,6 +144,12 @@ const pathsMovil = {
       requestBody: cuerpo({ rol: "Cliente", id_cliente: 3, estado: true }),
       responses: { 200: ok("Actualizado"), ...errores }
     }
+  },
+  "/api/usuarios/{id}/aprobar": {
+    post: { tags: ["Usuarios"], summary: "Aprobar una solicitud de registro y asignar rol", security: SESION, parameters: [ID], requestBody: cuerpo({ rol: "Cliente" }), responses: { 200: ok("Aprobada; se avisa por correo"), 409: errores[409] } }
+  },
+  "/api/usuarios/{id}/rechazar": {
+    post: { tags: ["Usuarios"], summary: "Rechazar una solicitud de registro", security: SESION, parameters: [ID], requestBody: cuerpo({ motivo: "No es cliente de la tienda" }), responses: { 200: ok("Rechazada; se avisa por correo"), 400: errores[400], 409: errores[409] } }
   },
   "/api/usuarios/{id}/password": {
     put: { tags: ["Usuarios"], summary: "Restablecer la contraseña de un usuario", security: SESION, parameters: [ID], requestBody: cuerpo({ nueva: "NuevaClave2026" }), responses: { 200: ok("Restablecida"), 400: errores[400] } }

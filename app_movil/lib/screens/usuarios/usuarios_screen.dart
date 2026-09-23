@@ -9,7 +9,10 @@ import 'usuario_form_screen.dart';
 
 /// Usuarios y roles (solo Administrador): quién entra a la app y con qué rol.
 class UsuariosScreen extends StatefulWidget {
-  const UsuariosScreen({super.key});
+  const UsuariosScreen({super.key, this.soloPendientes = false});
+
+  /// Abre directo en "Pendientes" (desde el aviso de solicitudes).
+  final bool soloPendientes;
 
   @override
   State<UsuariosScreen> createState() => _UsuariosScreenState();
@@ -29,7 +32,7 @@ IconData iconoRol(String rol) => switch (rol) {
 
 class _UsuariosScreenState extends State<UsuariosScreen> {
   String _buscar = '';
-  String _rol = '';
+  late String _rol = widget.soloPendientes ? 'pendientes' : '';
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +47,13 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
       body: Column(children: [
         CampoBusqueda(pista: 'Nombre o correo', onBuscar: (v) => setState(() => _buscar = v)),
         FiltroChips<String>(
-          opciones: const {'': 'Todos', Rol.admin: 'Administradores', Rol.vendedor: 'Vendedores', Rol.cliente: 'Clientes'},
+          opciones: const {
+            'pendientes': 'Pendientes',
+            '': 'Todos',
+            Rol.admin: 'Administradores',
+            Rol.vendedor: 'Vendedores',
+            Rol.cliente: 'Clientes',
+          },
           valor: _rol,
           onCambio: (v) => setState(() => _rol = v),
         ),
@@ -52,8 +61,16 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
           child: ListaPaginada<UsuarioApp>(
             key: ValueKey('$_buscar|$_rol'),
             cargar: (p) => Api.i.pagina('/api/usuarios', UsuarioApp.desdeJson,
-                query: {'search': _buscar, 'rol': _rol, 'page': p, 'limit': 30}),
-            vacio: const EstadoVacio(icono: Icons.manage_accounts_outlined, titulo: 'No hay usuarios en este filtro'),
+                query: {
+                  'search': _buscar,
+                  if (_rol == 'pendientes') 'aprobacion': 'pendiente' else 'rol': _rol,
+                  'page': p,
+                  'limit': 30,
+                }),
+            vacio: EstadoVacio(
+              icono: _rol == 'pendientes' ? Icons.how_to_reg_outlined : Icons.manage_accounts_outlined,
+              titulo: _rol == 'pendientes' ? 'No hay solicitudes de registro por revisar' : 'No hay usuarios en este filtro',
+            ),
             itemBuilder: (ctx, u) => ListTile(
               leading: CircleAvatar(
                 backgroundColor: colorRol(u.rol).withAlpha(u.estado ? 40 : 15),
@@ -62,11 +79,18 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
               title: Text(u.nombre, style: TextStyle(color: u.estado ? null : gris)),
               subtitle: Text([
                 u.correo,
-                if (u.cliente != null) 'Ficha: ${u.cliente}',
-                'Último acceso: ${u.ultimoAcceso == null ? 'nunca' : fechaHora(u.ultimoAcceso)}',
+                if (u.pendiente) 'Se registró el ${fechaHora(u.creadoEn)}',
+                if (!u.pendiente && u.cliente != null) 'Ficha: ${u.cliente}',
+                if (!u.pendiente) 'Último acceso: ${u.ultimoAcceso == null ? 'nunca' : fechaHora(u.ultimoAcceso)}',
               ].join('\n')),
               isThreeLine: true,
-              trailing: u.estado ? Etiqueta(u.rol, color: colorRol(u.rol)) : const Etiqueta('Inactivo', color: gris),
+              trailing: u.pendiente
+                  ? const Etiqueta('Pendiente', color: ambar, icono: Icons.hourglass_top)
+                  : u.rechazado
+                      ? const Etiqueta('Rechazado', color: rojo)
+                      : u.estado
+                          ? Etiqueta(u.rol, color: colorRol(u.rol))
+                          : const Etiqueta('Inactivo', color: gris),
               onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => UsuarioFormScreen(usuario: u))),
             ),
           ),

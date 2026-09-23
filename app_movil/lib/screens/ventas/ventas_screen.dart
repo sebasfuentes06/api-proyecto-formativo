@@ -7,6 +7,7 @@ import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
+import '../usuarios/usuarios_screen.dart';
 import 'venta_detalle_screen.dart';
 import 'venta_form_screen.dart';
 
@@ -163,7 +164,20 @@ class _VentasScreenState extends State<VentasScreen> {
           ),
         );
 
+    final solicitudes = aInt(r?['solicitudes_pendientes']);
     return Column(children: [
+      // Aviso para el Administrador: gente que se registró y espera aprobación.
+      if (Sesion.i.esAdmin && solicitudes > 0)
+        Card(
+          color: tema.colorScheme.tertiaryContainer,
+          child: ListTile(
+            leading: const Icon(Icons.how_to_reg),
+            title: Text('$solicitudes solicitud${solicitudes == 1 ? '' : 'es'} de registro'),
+            subtitle: const Text('Toca para aprobar o rechazar'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UsuariosScreen(soloPendientes: true))),
+          ),
+        ),
       if (r != null)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),

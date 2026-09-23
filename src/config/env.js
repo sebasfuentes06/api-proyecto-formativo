@@ -72,6 +72,22 @@ const env = {
     secretoEventos: process.env.WOMPI_SECRETO_EVENTOS ?? null,
     checkoutUrl: process.env.WOMPI_CHECKOUT_URL ?? "https://checkout.wompi.co/l/"
   },
+  /**
+   * Correo saliente (códigos de recuperación y avisos de registro).
+   * Funciona con cualquier SMTP. Con Gmail: smtp.gmail.com, puerto 465, tu
+   * correo y una "contraseña de aplicación" de 16 letras (no tu clave normal).
+   *
+   * CORREO_MODO=prueba no envía nada: guarda el último correo en memoria para
+   * las pruebas automáticas. Nunca se activa en Vercel.
+   */
+  correo: {
+    host: process.env.CORREO_SMTP_HOST ?? null,
+    puerto: Number(process.env.CORREO_SMTP_PUERTO ?? 465),
+    usuario: process.env.CORREO_USUARIO ?? null,
+    clave: process.env.CORREO_CLAVE ?? null,
+    remitente: process.env.CORREO_REMITENTE ?? process.env.CORREO_USUARIO ?? null,
+    modoPrueba: process.env.CORREO_MODO === "prueba" && !process.env.VERCEL
+  },
   db: {
     connectionString: databaseUrl,
     ssl: resolverSsl(),

@@ -32,6 +32,7 @@ DROP VIEW  IF EXISTS v_ventas_saldo;
 DROP TABLE IF EXISTS wompi_links, pagos, detalle_venta, detalle_pedido,
                      producto_imagen CASCADE;
 DROP TABLE IF EXISTS ventas, pedidos CASCADE;
+DROP TABLE IF EXISTS codigos_recuperacion CASCADE;
 DROP TABLE IF EXISTS usuarios CASCADE;
 DROP SEQUENCE IF EXISTS seq_numero_factura, seq_codigo_pedido;
 DROP FUNCTION IF EXISTS fecha_local(TIMESTAMP), hoy_local();

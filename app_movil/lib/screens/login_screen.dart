@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../core/config.dart';
 import '../core/sesion.dart';
+import 'acceso/recuperar_screen.dart';
+import 'acceso/registro_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,6 +25,19 @@ class _LoginScreenState extends State<LoginScreen> {
     _correo.dispose();
     _clave.dispose();
     super.dispose();
+  }
+
+  /// Al volver de registrarse o de recuperar la contraseña, el correo queda
+  /// escrito en el login para no tener que teclearlo otra vez.
+  Future<void> _abrir(Widget pantalla) async {
+    final correo = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => pantalla));
+    if (correo != null && mounted) {
+      setState(() {
+        _correo.text = correo;
+        _clave.clear();
+        _error = null;
+      });
+    }
   }
 
   Future<void> _entrar() async {
@@ -88,6 +103,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       validator: (v) => (v ?? '').isEmpty ? 'Escribe tu contraseña' : null,
                     ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => _abrir(RecuperarScreen(correoInicial: _correo.text.trim().isEmpty ? null : _correo.text.trim())),
+                        child: const Text('¿Olvidaste tu contraseña?'),
+                      ),
+                    ),
                     if (_error != null) ...[
                       const SizedBox(height: 14),
                       Container(
@@ -103,6 +125,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: _cargando
                           ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
                           : const Text('Ingresar'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => _abrir(const RegistroScreen()),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                      child: const Text('¿No tienes cuenta? Regístrate'),
                     ),
                     const SizedBox(height: 24),
                     Text(

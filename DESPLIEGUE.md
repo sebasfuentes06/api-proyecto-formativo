@@ -207,6 +207,42 @@ En PowerShell: `$env:API_URL="https://api-proyecto-formativo.vercel.app"; npm ru
 
 ---
 
+## Parte 7 — Correo: registro y "olvidé mi contraseña"
+
+La app envía correos para: el **código de 6 dígitos** de recuperación, el aviso
+de **"recibimos tu registro"**, el aviso al **administrador** de que hay una
+solicitud nueva, y el aviso de **cuenta aprobada / rechazada**.
+
+Se usa cualquier SMTP. Con **Gmail** (gratis, ~500 correos al día):
+
+1. En la cuenta de Gmail que va a enviar: <https://myaccount.google.com/security>
+   → activa la **Verificación en 2 pasos** (sin esto no aparece el paso 2).
+2. <https://myaccount.google.com/apppasswords> → nombre "Essence API" → **Crear**.
+   Copia la clave de **16 letras** (sale una sola vez).
+3. En Vercel → *Environment Variables* (Production), tipo **Secret**:
+
+| Variable | Valor |
+|---|---|
+| `CORREO_SMTP_HOST` | `smtp.gmail.com` |
+| `CORREO_SMTP_PUERTO` | `465` |
+| `CORREO_USUARIO` | el Gmail completo |
+| `CORREO_CLAVE` | la clave de aplicación de 16 letras (con o sin espacios) |
+| `CORREO_REMITENTE` | el mismo Gmail |
+
+4. **Redeploy.**
+5. En la app: **avatar ▸ Usuarios y roles** → edita al administrador y ponle un
+   **correo real**. `admin@essence.com` no existe: los avisos de solicitudes
+   nuevas y el código de recuperación del admin llegarían a ninguna parte.
+
+Sin estas variables la app funciona igual; lo único que pasa es que
+"¿Olvidaste tu contraseña?" responde que el correo no está configurado (la
+administradora puede restablecer claves desde Usuarios) y los avisos no salen.
+
+**Probar en tu PC sin enviar correos reales:** agrega `CORREO_MODO=prueba` al
+`.env` local; `npm run test:movil` recorre entonces el flujo completo del código.
+
+---
+
 ## Antes de la sustentación
 
 **La primera petición es lenta.** Son dos esperas que se suman: Vercel apaga la
@@ -263,6 +299,8 @@ en tu `.env` local hay que pegar la nueva a mano.
 | La API responde pero las tablas no existen | no se corrió `npm run db:setup` contra Neon | parte 4 |
 | La app dice "Falta configurar JWT_SECRETO" | no está la variable en Vercel o falta *Redeploy* | parte 6, paso 2 |
 | La lista de clientes da error 500 tras subir el código | no se corrió `npm run db:movil` contra Neon | parte 6, paso 1 |
+| "El envío de correos no está configurado" al recuperar contraseña | faltan las variables `CORREO_*` en Vercel o el *Redeploy* | parte 7 |
+| El código nunca llega | la clave de aplicación está mal, o el correo cayó en spam | revisa *Logs* en Vercel (`[correo]`) y la carpeta de spam |
 | "Wompi no está configurado" al crear un link | falta `WOMPI_LLAVE_PRIVADA` en Vercel | parte 6, paso 2 |
 | El cliente pagó con el link pero el abono no aparece | la URL de eventos no está en Wompi, o `WOMPI_SECRETO_EVENTOS` no coincide | parte 6, paso 4; mientras tanto *Verificar pago Wompi* |
 | `/docs` se queda en "Cargando la documentación…" | el CDN de Swagger no cargó | revisa la consola del navegador (F12); abre `/api/openapi.json` para confirmar que la especificación sí está |

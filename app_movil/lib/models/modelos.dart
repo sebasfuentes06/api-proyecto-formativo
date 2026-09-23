@@ -369,6 +369,10 @@ class UsuarioApp {
     this.idCliente,
     this.cliente,
     this.ultimoAcceso,
+    this.aprobacion = 'aprobado',
+    this.telefono,
+    this.motivoRechazo,
+    this.creadoEn,
   });
 
   final int id;
@@ -377,6 +381,14 @@ class UsuarioApp {
   final int? idCliente;
   final String? cliente;
   final DateTime? ultimoAcceso;
+
+  /// pendiente | aprobado | rechazado (registro desde la app).
+  final String aprobacion;
+  final String? telefono, motivoRechazo;
+  final DateTime? creadoEn;
+
+  bool get pendiente => aprobacion == 'pendiente';
+  bool get rechazado => aprobacion == 'rechazado';
 
   factory UsuarioApp.desdeJson(Json j) => UsuarioApp(
         id: aInt(j['id_usuario']),
@@ -387,5 +399,9 @@ class UsuarioApp {
         idCliente: j['id_cliente'] == null ? null : aInt(j['id_cliente']),
         cliente: j['cliente'],
         ultimoAcceso: aFecha(j['ultimo_acceso']),
+        aprobacion: j['aprobacion'] ?? 'aprobado',
+        telefono: j['telefono'],
+        motivoRechazo: j['motivo_rechazo'],
+        creadoEn: aFecha(j['created_at']),
       );
 }

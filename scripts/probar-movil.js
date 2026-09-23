@@ -398,6 +398,72 @@ async function main() {
   token = tokenAdmin;
 
   // ------------------------------------------------------------------
+  titulo("Registro con aprobación y recuperación de contraseña");
+  const correoReg = `registro${marca}@correo.com`;
+  const registroBase = { nombre: `Registro ${marca}`, correo: correoReg, telefono: "3105556677", ciudad: "La Pintada", password: "Registro123" };
+  r = await pedir("POST", "/api/auth/registro", registroBase, { sinToken: true });
+  comprobar("registro sin aceptar tratamiento de datos: 400", r.estado === 400);
+  r = await pedir("POST", "/api/auth/registro", { ...registroBase, acepta_datos: true }, { sinToken: true });
+  comprobar("registro correcto: 201", r.estado === 201, r.cuerpo);
+  r = await pedir("POST", "/api/auth/registro", { ...registroBase, acepta_datos: true }, { sinToken: true });
+  comprobar("registrarse dos veces con el mismo correo: 409", r.estado === 409);
+  r = await pedir("POST", "/api/auth/login", { correo: correoReg, password: "Registro123" }, { sinToken: true });
+  comprobar("una cuenta pendiente no puede entrar (403)", r.estado === 403 && /pendiente/i.test(r.cuerpo?.error ?? ""), r.cuerpo);
+
+  r = await pedir("GET", "/api/usuarios?aprobacion=pendiente&limit=100");
+  const solicitud = r.cuerpo?.datos?.find((u) => u.correo === correoReg);
+  comprobar("la solicitud aparece en Pendientes del Administrador", !!solicitud && solicitud.estado === false);
+  r = await pedir("GET", "/api/dashboard/resumen");
+  comprobar("el resumen del Administrador cuenta las solicitudes", r.cuerpo?.datos?.solicitudes_pendientes >= 1);
+  r = await pedir("PUT", `/api/usuarios/${solicitud?.id_usuario}`, { estado: true });
+  comprobar("no se activa una solicitud sin aprobarla (409)", r.estado === 409);
+  r = await pedir("POST", `/api/usuarios/${solicitud?.id_usuario}/aprobar`, { rol: "Cliente" });
+  comprobar("aprobar la solicitud como Cliente", r.estado === 200 && r.cuerpo?.datos?.aprobacion === "aprobado", r.cuerpo);
+  r = await pedir("POST", "/api/auth/login", { correo: correoReg, password: "Registro123" }, { sinToken: true });
+  comprobar("la cuenta aprobada ya entra y queda como Cliente", r.estado === 200 && r.cuerpo?.datos?.usuario?.rol === "Cliente");
+  const idFichaReg = r.cuerpo?.datos?.usuario?.id_cliente;
+  r = await pedir("GET", `/api/clientes/${idFichaReg}`);
+  comprobar("su ficha de cliente quedó activa", r.cuerpo?.datos?.estado === true);
+
+  const correoRech = `rechazo${marca}@correo.com`;
+  await pedir("POST", "/api/auth/registro", { ...registroBase, correo: correoRech, acepta_datos: true }, { sinToken: true });
+  r = await pedir("GET", `/api/usuarios?aprobacion=pendiente&search=${encodeURIComponent(correoRech)}`);
+  const idRech = r.cuerpo?.datos?.[0]?.id_usuario;
+  r = await pedir("POST", `/api/usuarios/${idRech}/rechazar`, {});
+  comprobar("rechazar sin motivo: 400", r.estado === 400);
+  r = await pedir("POST", `/api/usuarios/${idRech}/rechazar`, { motivo: "No es cliente de la tienda" });
+  comprobar("rechazar una solicitud", r.estado === 200 && r.cuerpo?.datos?.aprobacion === "rechazado");
+  r = await pedir("POST", "/api/auth/login", { correo: correoRech, password: "Registro123" }, { sinToken: true });
+  comprobar("una cuenta rechazada no entra (403)", r.estado === 403);
+
+  r = await pedir("POST", "/api/auth/olvide", { correo: `nadie${marca}@correo.com` }, { sinToken: true });
+  const olvidoDisponible = r.estado === 200;
+  comprobar("olvidé contraseña con un correo inexistente no revela nada", r.estado === 200 || r.estado === 503, r.cuerpo);
+
+  const bandeja = await pedir("GET", `/api/auth/prueba/ultimo-correo?para=${correoReg}`, null, { sinToken: true });
+  if (olvidoDisponible && bandeja.estado === 200) {
+    r = await pedir("POST", "/api/auth/olvide", { correo: correoReg }, { sinToken: true });
+    comprobar("pedir código de recuperación: 200", r.estado === 200, r.cuerpo);
+    r = await pedir("POST", "/api/auth/olvide", { correo: correoReg }, { sinToken: true });
+    comprobar("pedir otro código de inmediato: 429", r.estado === 429);
+    const ultimo = (await pedir("GET", `/api/auth/prueba/ultimo-correo?para=${correoReg}`, null, { sinToken: true })).cuerpo?.datos;
+    const codigo = ultimo?.texto?.match(/\b(\d{6})\b/)?.[1];
+    comprobar("el correo trae un código de 6 dígitos", /^\d{6}$/.test(codigo ?? ""), ultimo);
+    const malo = codigo === "000000" ? "111111" : "000000";
+    r = await pedir("POST", "/api/auth/restablecer", { correo: correoReg, codigo: malo, nueva: "NuevaClave123" }, { sinToken: true });
+    comprobar("código incorrecto: 400 y dice cuántos intentos quedan", r.estado === 400 && /quedan 4/.test(r.cuerpo?.error ?? ""), r.cuerpo);
+    r = await pedir("POST", "/api/auth/restablecer", { correo: correoReg, codigo, nueva: "NuevaClave123" }, { sinToken: true });
+    comprobar("código correcto cambia la contraseña", r.estado === 200, r.cuerpo);
+    r = await pedir("POST", "/api/auth/restablecer", { correo: correoReg, codigo, nueva: "OtraMas123" }, { sinToken: true });
+    comprobar("el mismo código no sirve dos veces", r.estado === 400);
+    r = await pedir("POST", "/api/auth/login", { correo: correoReg, password: "NuevaClave123" }, { sinToken: true });
+    comprobar("entra con la contraseña nueva", r.estado === 200);
+  } else {
+    console.log("  (flujo completo del código omitido: solo corre en local con CORREO_MODO=prueba)");
+  }
+  await pedir("PUT", `/api/usuarios/${solicitud?.id_usuario}`, { estado: false });
+
+  // ------------------------------------------------------------------
   titulo("Wompi");
   r = await pedir("GET", "/api/pagos/wompi");
   comprobar("estado de configuración de Wompi", r.estado === 200 && typeof r.cuerpo?.datos?.links === "boolean");

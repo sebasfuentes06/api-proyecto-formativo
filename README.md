@@ -418,7 +418,9 @@ Además del CRUD, la API sirve a la **app Flutter del administrador**
 | `/api/clientes/:id/historial` y `/estado-cuenta` | Historial de compras y saldo del cliente |
 | `/api/productos/:id/imagen` | Foto del producto (se guarda en PostgreSQL) |
 | `/api/dashboard/resumen` | Ventas del día y del mes, cartera, pedidos pendientes, stock bajo |
-| `/api/usuarios` | Usuarios y roles (Administrador, Vendedor, Cliente); solo Administrador |
+| `/api/usuarios` | Usuarios y roles (Administrador, Vendedor, Cliente); solo Administrador. `POST /:id/aprobar` y `/:id/rechazar` para las solicitudes de registro |
+| `POST /api/auth/registro` | Registro desde la app: queda **pendiente** hasta que el Administrador lo apruebe |
+| `POST /api/auth/olvide` y `/restablecer` | Recuperar contraseña con un código de 6 dígitos enviado al correo (vence en 15 min, 5 intentos) |
 
 **Roles.** Administrador: todo. Vendedor: clientes, pedidos, ventas y abonos, sin
 anular ni editar catálogo o usuarios. Cliente: solo su catálogo, sus pedidos, sus

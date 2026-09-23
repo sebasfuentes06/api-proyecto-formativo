@@ -297,3 +297,39 @@ ALTER TABLE ventas  DROP CONSTRAINT IF EXISTS chk_ventas_canal;
 ALTER TABLE ventas  ADD CONSTRAINT chk_ventas_canal  CHECK (canal IN ('whatsapp', 'punto_fisico', 'app'));
 
 CREATE INDEX IF NOT EXISTS idx_ventas_usuario ON ventas (id_usuario);
+
+-- ============================================================
+-- 10. REGISTRO CON APROBACIÓN Y RECUPERACIÓN DE CONTRASEÑA
+-- ------------------------------------------------------------
+-- Cualquiera puede registrarse desde la app, pero la cuenta queda
+-- "pendiente" hasta que el Administrador la apruebe (y le asigne rol).
+-- Los usuarios creados por el Administrador nacen "aprobado".
+-- ============================================================
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS aprobacion     VARCHAR(20) NOT NULL DEFAULT 'aprobado';
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono       VARCHAR(20);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS motivo_rechazo VARCHAR(250);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS revisado_en    TIMESTAMP;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_usuarios_aprobacion') THEN
+    ALTER TABLE usuarios ADD CONSTRAINT chk_usuarios_aprobacion
+      CHECK (aprobacion IN ('pendiente', 'aprobado', 'rechazado'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_usuarios_aprobacion ON usuarios (aprobacion);
+
+-- Códigos de "olvidé mi contraseña". Se guarda el HASH del código, no el
+-- código: si alguien lee la tabla, no puede usar los códigos vigentes.
+CREATE TABLE IF NOT EXISTS codigos_recuperacion (
+    id_codigo    SERIAL PRIMARY KEY,
+    id_usuario   INT NOT NULL,
+    codigo_hash  VARCHAR(64) NOT NULL,
+    expira_en    TIMESTAMP NOT NULL,
+    intentos     INT NOT NULL DEFAULT 0,
+    usado_en     TIMESTAMP,
+    creado_en    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_codigos_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_codigos_usuario ON codigos_recuperacion (id_usuario);

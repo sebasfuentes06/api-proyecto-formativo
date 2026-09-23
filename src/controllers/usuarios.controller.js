@@ -3,6 +3,7 @@ import { query, transaccion } from "../db/pool.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { ROLES } from "../middlewares/auth.js";
 import { paginacion, respuestaListado } from "../utils/consulta.js";
+import { correos } from "../services/correo.service.js";
 
 /**
  * Gestión de usuarios de la app (solo Administrador).
@@ -15,13 +16,16 @@ import { paginacion, respuestaListado } from "../utils/consulta.js";
  *    podría volver a crear usuarios). Mismo resguardo que en el proyecto web.
  *  - Los usuarios no se borran (tienen ventas y pagos a su nombre): se
  *    desactivan.
+ *  - Quien se registra desde la app queda "pendiente": no entra hasta que el
+ *    Administrador lo apruebe (y le asigne rol) con /aprobar, o lo rechace.
  */
 
 const PATRON_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const SELECT_BASE = `
   SELECT u.id_usuario, u.nombre, u.correo, u.rol, u.estado, u.id_cliente,
-         u.ultimo_acceso, u.created_at, c.nombre AS cliente
+         u.ultimo_acceso, u.created_at, u.aprobacion, u.telefono, u.motivo_rechazo, u.revisado_en,
+         c.nombre AS cliente
     FROM usuarios u
     LEFT JOIN clientes c ON c.id_cliente = u.id_cliente
 `;
@@ -63,6 +67,10 @@ const listar = asyncHandler(async (req, res) => {
     valores.push(req.query.rol);
     condiciones.push(`u.rol = $${valores.length}`);
   }
+  if (["pendiente", "aprobado", "rechazado"].includes(req.query.aprobacion)) {
+    valores.push(req.query.aprobacion);
+    condiciones.push(`u.aprobacion = $${valores.length}`);
+  }
   if (req.query.status === "active") condiciones.push("u.estado");
   if (req.query.status === "inactive") condiciones.push("NOT u.estado");
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
@@ -70,7 +78,7 @@ const listar = asyncHandler(async (req, res) => {
   const { rows: t } = await query(`SELECT COUNT(*)::INT AS total FROM usuarios u ${where}`, valores);
   const { rows } = await query(
     `${SELECT_BASE} ${where}
-     ORDER BY u.estado DESC, array_position(ARRAY['Administrador','Vendedor','Cliente']::VARCHAR[], u.rol), u.nombre
+     ORDER BY (u.aprobacion = 'pendiente') DESC, u.estado DESC, array_position(ARRAY['Administrador','Vendedor','Cliente']::VARCHAR[], u.rol), u.nombre
      LIMIT $${valores.length + 1} OFFSET $${valores.length + 2}`,
     [...valores, porPagina, offset]
   );
@@ -121,6 +129,9 @@ const actualizar = asyncHandler(async (req, res) => {
     if (nuevo.nombre.length < 3) throw new ErrorHttp(400, "Escribe el nombre.", { nombre: "Obligatorio." });
     if (!PATRON_CORREO.test(nuevo.correo)) throw new ErrorHttp(400, "Correo no válido.", { correo: "Formato." });
     if (typeof nuevo.estado !== "boolean") throw new ErrorHttp(400, "El estado debe ser verdadero o falso.");
+    if (actual.aprobacion !== "aprobado" && nuevo.estado) {
+      throw new ErrorHttp(409, "Esta cuenta es una solicitud de registro: apruébala con el botón Aprobar.");
+    }
     const idCliente = await validarRolYCliente(db, nuevo, actual.id_usuario);
 
     const dejaDeSerAdminActivo =
@@ -153,4 +164,60 @@ const restablecerPassword = asyncHandler(async (req, res) => {
   res.json({ ok: true, mensaje: "Contraseña restablecida. Compártela con la persona por un medio privado." });
 });
 
-export default { listar, crear, actualizar, restablecerPassword };
+/**
+ * POST /api/usuarios/:id/aprobar  { rol? }  (por defecto Cliente)
+ * Activa la cuenta. Si queda como Cliente, también se activa su ficha.
+ */
+const aprobar = asyncHandler(async (req, res) => {
+  const rol = req.body?.rol ?? "Cliente";
+  if (!ROLES.includes(rol)) throw new ErrorHttp(400, "Rol no válido.", { rol: ROLES.join(", ") });
+
+  const usuario = await transaccion(async (db) => {
+    const { rows } = await db.query("SELECT * FROM usuarios WHERE id_usuario = $1 FOR UPDATE", [req.idNumerico]);
+    const u = rows[0];
+    if (!u) throw new ErrorHttp(404, "No existe ese usuario.");
+    if (u.aprobacion === "aprobado") throw new ErrorHttp(409, "Esta cuenta ya estaba aprobada.");
+
+    // Como Cliente conserva la ficha que se creó al registrarse; con otro rol
+    // la cuenta no va enlazada a ninguna ficha.
+    const idCliente = rol === "Cliente" ? u.id_cliente : null;
+    if (rol === "Cliente" && !idCliente) {
+      throw new ErrorHttp(409, "Esta solicitud no tiene ficha de cliente. Apruébala con otro rol o créala desde Usuarios.");
+    }
+    await db.query(
+      `UPDATE usuarios SET rol = $2, id_cliente = $3, estado = TRUE, aprobacion = 'aprobado',
+              motivo_rechazo = NULL, revisado_en = CURRENT_TIMESTAMP
+        WHERE id_usuario = $1`,
+      [u.id_usuario, rol, idCliente]
+    );
+    if (idCliente) await db.query("UPDATE clientes SET estado = TRUE WHERE id_cliente = $1", [idCliente]);
+    return { ...u, rol };
+  });
+
+  await correos.aprobado(usuario.correo, usuario.nombre, usuario.rol);
+  res.json({ ok: true, mensaje: `Cuenta de ${usuario.nombre} aprobada como ${usuario.rol}. Le avisamos por correo.`, datos: await obtener(usuario.id_usuario) });
+});
+
+/** POST /api/usuarios/:id/rechazar  { motivo } */
+const rechazar = asyncHandler(async (req, res) => {
+  const motivo = String(req.body?.motivo ?? "").trim();
+  if (motivo.length < 3) throw new ErrorHttp(400, "Escribe el motivo del rechazo.", { motivo: "Obligatorio." });
+
+  const usuario = await transaccion(async (db) => {
+    const { rows } = await db.query("SELECT * FROM usuarios WHERE id_usuario = $1 FOR UPDATE", [req.idNumerico]);
+    const u = rows[0];
+    if (!u) throw new ErrorHttp(404, "No existe ese usuario.");
+    if (u.aprobacion !== "pendiente") throw new ErrorHttp(409, "Solo se rechazan solicitudes pendientes.");
+    await db.query(
+      `UPDATE usuarios SET aprobacion = 'rechazado', estado = FALSE, motivo_rechazo = $2, revisado_en = CURRENT_TIMESTAMP
+        WHERE id_usuario = $1`,
+      [u.id_usuario, motivo.slice(0, 250)]
+    );
+    return u;
+  });
+
+  await correos.rechazado(usuario.correo, usuario.nombre, motivo);
+  res.json({ ok: true, mensaje: `Solicitud de ${usuario.nombre} rechazada.`, datos: await obtener(usuario.id_usuario) });
+});
+
+export default { listar, crear, actualizar, restablecerPassword, aprobar, rechazar };
