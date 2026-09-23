@@ -14,6 +14,7 @@
     "db:setup": "node scripts/setup-db.js",
     "db:seed": "node scripts/setup-db.js --solo-datos",
     "db:movil": "node scripts/migrar-movil.js",
+    "db:usuarios-demo": "node scripts/usuarios-demo.js",
     "test:movil": "node scripts/probar-movil.js",
     "test:api": "node scripts/probar-api.js"
   },
