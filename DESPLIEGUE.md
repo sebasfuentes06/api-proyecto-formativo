@@ -152,6 +152,56 @@ registros de verdad en Neon. Si terminan en 70/0, el despliegue está completo.
 
 ---
 
+## Parte 6 — Proceso de ventas de la app móvil
+
+La API ahora también sirve a la app Flutter (`app_movil/`): pedidos, ventas con
+factura, pagos/abonos, Wompi y estado de cuenta. Son tres pasos, **en este
+orden** (si se sube el código antes de migrar la base, la lista de clientes
+falla porque busca tablas que todavía no existen):
+
+**1. Migrar la base de Neon desde tu equipo** (con `DATABASE_URL` en el `.env`,
+como en la parte 4). No borra nada: solo agrega tablas.
+
+```bash
+npm install
+npm run db:movil
+```
+
+Crea las tablas nuevas y el usuario administrador (`ADMIN_CORREO` /
+`ADMIN_PASSWORD` del `.env`, o `admin@essence.com` / `Essence2026*` si no están).
+
+**2. Variables en Vercel** — *Settings → Environment Variables* (Production):
+
+| Variable | Valor |
+|---|---|
+| `JWT_SECRETO` | una frase larga inventada por ti (obligatoria: sin ella no hay login) |
+| `WOMPI_ENTORNO` | `sandbox` |
+| `WOMPI_LLAVE_PUBLICA` | `pub_test_...` (panel de Wompi → Desarrolladores) |
+| `WOMPI_LLAVE_PRIVADA` | `prv_test_...` |
+| `WOMPI_SECRETO_EVENTOS` | `test_events_...` (sección *Secretos para integración técnica*) |
+
+**3. Subir el código** (`git push`) — o *Redeploy* si ya estaba subido.
+
+**4. URL de eventos en Wompi** — panel de comercios → *Desarrolladores* →
+*URL de Eventos* (modo Sandbox):
+
+```
+https://api-proyecto-formativo.vercel.app/api/webhooks/wompi
+```
+
+Sin esto la app funciona igual, pero los pagos con link hay que confirmarlos a
+mano con *Verificar pago Wompi*.
+
+**Comprobar:**
+
+```bash
+API_URL=https://api-proyecto-formativo.vercel.app npm run test:movil
+```
+
+En PowerShell: `$env:API_URL="https://api-proyecto-formativo.vercel.app"; npm run test:movil`
+
+---
+
 ## Antes de la sustentación
 
 **La primera petición es lenta.** Son dos esperas que se suman: Vercel apaga la
@@ -206,5 +256,9 @@ en tu `.env` local hay que pegar la nueva a mano.
 | `"baseDeDatos": "sin conexión"` | falta `DATABASE_URL`, o no se hizo *Redeploy* tras agregarla | partes 3 y 5 |
 | `too many connections` | se usó la cadena **sin** `-pooler` | cámbiala por la *Pooled connection* |
 | La API responde pero las tablas no existen | no se corrió `npm run db:setup` contra Neon | parte 4 |
+| La app dice "Falta configurar JWT_SECRETO" | no está la variable en Vercel o falta *Redeploy* | parte 6, paso 2 |
+| La lista de clientes da error 500 tras subir el código | no se corrió `npm run db:movil` contra Neon | parte 6, paso 1 |
+| "Wompi no está configurado" al crear un link | falta `WOMPI_LLAVE_PRIVADA` en Vercel | parte 6, paso 2 |
+| El cliente pagó con el link pero el abono no aparece | la URL de eventos no está en Wompi, o `WOMPI_SECRETO_EVENTOS` no coincide | parte 6, paso 4; mientras tanto *Verificar pago Wompi* |
 | `/docs` se queda en "Cargando la documentación…" | el CDN de Swagger no cargó | revisa la consola del navegador (F12); abre `/api/openapi.json` para confirmar que la especificación sí está |
 | Cambié una variable y sigue igual | las variables se leen al desplegar | *Redeploy* |

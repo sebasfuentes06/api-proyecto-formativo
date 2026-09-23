@@ -50,6 +50,28 @@ const env = {
     .split(",")
     .map((origen) => origen.trim())
     .filter(Boolean),
+  // Firma de los tokens de sesión de la app móvil. En Vercel es OBLIGATORIO
+  // definirla (Settings > Environment Variables): si falta, el login responde
+  // un error claro en vez de firmar con una clave conocida por todos.
+  jwtSecreto: process.env.JWT_SECRETO ?? null,
+  jwtDuracion: process.env.JWT_DURACION ?? "7d",
+  /**
+   * Wompi (pasarela de pagos colombiana). En modo "sandbox" no se mueve
+   * dinero real: se paga con tarjetas y cuentas de prueba.
+   * Las llaves salen de https://comercios.wompi.co > Desarrolladores.
+   */
+  wompi: {
+    entorno: process.env.WOMPI_ENTORNO === "production" ? "production" : "sandbox",
+    apiUrl:
+      process.env.WOMPI_API_URL ??
+      (process.env.WOMPI_ENTORNO === "production"
+        ? "https://production.wompi.co/v1"
+        : "https://sandbox.wompi.co/v1"),
+    llavePublica: process.env.WOMPI_LLAVE_PUBLICA ?? null,
+    llavePrivada: process.env.WOMPI_LLAVE_PRIVADA ?? null,
+    secretoEventos: process.env.WOMPI_SECRETO_EVENTOS ?? null,
+    checkoutUrl: process.env.WOMPI_CHECKOUT_URL ?? "https://checkout.wompi.co/l/"
+  },
   db: {
     connectionString: databaseUrl,
     ssl: resolverSsl(),

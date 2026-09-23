@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Solo en modo debug: permite http:// para probar contra la API local
+         (http://10.0.2.2:3000). La versión release solo habla por https. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <application android:usesCleartextTraffic="true" />
+</manifest>

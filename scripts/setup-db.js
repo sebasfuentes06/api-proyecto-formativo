@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { env } from "../src/config/env.js";
 import { pool, query } from "../src/db/pool.js";
+import { asegurarAdministrador } from "../src/services/administrador.js";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const CARPETA_SQL = resolve(aqui, "..", "database");
@@ -92,8 +93,13 @@ async function main() {
   if (!soloDatos) {
     await crearBaseSiFalta();
     await correrArchivo("esquema.sql");
+    // Tablas de la app móvil: pedidos, ventas, pagos, usuarios.
+    await correrArchivo("movil.sql");
   }
   await correrArchivo("datos_ejemplo.sql");
+
+  const admin = await asegurarAdministrador();
+  if (admin.creado) console.log(`  administrador de la app: ${admin.correo} / ${admin.clave}`);
 
   const { rows } = await query(
     `SELECT (SELECT COUNT(*) FROM categorias)::INT  AS categorias,

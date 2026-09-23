@@ -45,4 +45,32 @@ pool.on("error", (error) => {
  */
 const query = (texto, valores) => pool.query(texto, valores);
 
-export { pool, query };
+/**
+ * Ejecuta varias consultas como una sola unidad: o se guardan todas o
+ * ninguna. Es lo que evita, por ejemplo, que una venta quede registrada
+ * pero el stock sin descontar porque algo falló a la mitad.
+ *
+ *     await transaccion(async (cliente) => {
+ *       await cliente.query("UPDATE ...");
+ *       await cliente.query("INSERT ...");
+ *     });
+ *
+ * Todas las consultas de adentro deben usar `cliente`, no `query`: `query`
+ * toma otra conexión del pool y quedaría por fuera de la transacción.
+ */
+async function transaccion(trabajo) {
+  const cliente = await pool.connect();
+  try {
+    await cliente.query("BEGIN");
+    const resultado = await trabajo(cliente);
+    await cliente.query("COMMIT");
+    return resultado;
+  } catch (error) {
+    await cliente.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    cliente.release();
+  }
+}
+
+export { pool, query, transaccion };

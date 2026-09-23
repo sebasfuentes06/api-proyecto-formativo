@@ -6,6 +6,16 @@ import categorias from "./categorias.routes.js";
 import proveedores from "./proveedores.routes.js";
 import clientes from "./clientes.routes.js";
 import productos from "./productos.routes.js";
+import auth from "./auth.routes.js";
+import pedidos from "./pedidos.routes.js";
+import ventas from "./ventas.routes.js";
+import pagos from "./pagos.routes.js";
+import { requiereSesion } from "../middlewares/auth.js";
+import { validarId } from "../middlewares/validar.js";
+import cuentas from "../controllers/cuentas.controller.js";
+import imagenes from "../controllers/imagenes.controller.js";
+import dashboard from "../controllers/dashboard.controller.js";
+import pagosControlador from "../controllers/pagos.controller.js";
 
 /**
  * Punto donde se juntan todas las rutas de la API.
@@ -14,6 +24,43 @@ import productos from "./productos.routes.js";
  * se crea su archivo de rutas y se registra aquí, en una línea.
  */
 const router = Router();
+
+/**
+ * Índice de la API en JSON.
+ *
+ * Es lo que antes devolvía la raíz. Se movió aquí cuando la raíz pasó a ser
+ * una página web: un programa que consulte la API espera JSON, y una persona
+ * que abra el navegador espera algo que pueda leer. Cada uno tiene su sitio.
+ */
+router.get("/", (_req, res) => {
+  res.json({
+    nombre: "API Proyecto Formativo - Essence Don Aire",
+    version: "1.0.0",
+    descripcion: "API REST con operaciones CRUD sobre categorías, proveedores, clientes y productos.",
+    documentacion: "/docs",
+    especificacion: "/api/openapi.json",
+    panel: "/panel",
+    estado: "/api/health",
+    recursos: {
+      categorias: "/api/categorias",
+      proveedores: "/api/proveedores",
+      clientes: "/api/clientes",
+      productos: "/api/productos"
+    },
+    appMovil: {
+      nota: "Requieren sesión: Authorization: Bearer <token de /api/auth/login>",
+      login: "POST /api/auth/login",
+      pedidos: "/api/pedidos",
+      ventas: "/api/ventas",
+      pagos: "/api/pagos",
+      carteraPendiente: "/api/pagos/pendientes",
+      dashboard: "/api/dashboard/resumen",
+      estadoDeCuenta: "/api/clientes/:id/estado-cuenta",
+      historialDeCompras: "/api/clientes/:id/historial",
+      webhookWompi: "POST /api/webhooks/wompi"
+    }
+  });
+});
 
 /**
  * Estado de la API y de la base de datos.
@@ -50,6 +97,29 @@ router.get("/openapi.json", (req, res) => {
   res.json(construirEspecificacion({ url: `${protocolo}://${req.get("host")}` }));
 });
 
+// --- Rutas de la app móvil ------------------------------------
+// Van ANTES de los routers CRUD para que /clientes/:id/historial y
+// /productos/:id/imagen no los atrape el router genérico de la entidad.
+router.use("/auth", auth);
+
+// La imagen se consulta sin sesión (se usa en <img> y al compartir por
+// WhatsApp); subirla o borrarla sí exige sesión.
+router.get("/productos/:id/imagen", validarId, imagenes.obtener);
+router.put("/productos/:id/imagen", requiereSesion, validarId, imagenes.guardar);
+router.delete("/productos/:id/imagen", requiereSesion, validarId, imagenes.eliminar);
+
+router.get("/clientes/:id/historial", requiereSesion, validarId, cuentas.historial);
+router.get("/clientes/:id/estado-cuenta", requiereSesion, validarId, cuentas.estadoCuenta);
+
+router.use("/pedidos", requiereSesion, pedidos);
+router.use("/ventas", requiereSesion, ventas);
+router.use("/pagos", requiereSesion, pagos);
+router.get("/dashboard/resumen", requiereSesion, dashboard.resumen);
+
+// Lo llama Wompi: no lleva sesión, lleva firma (se verifica adentro).
+router.post("/webhooks/wompi", pagosControlador.wompiWebhook);
+
+// --- CRUD base del proyecto formativo ---------------------------
 router.use("/categorias", categorias);
 router.use("/proveedores", proveedores);
 router.use("/clientes", clientes);

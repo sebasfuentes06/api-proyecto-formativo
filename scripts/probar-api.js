@@ -114,8 +114,24 @@ async function main() {
     return;
   }
 
-  const portada = await pedir("GET", "/");
-  comprobar("la portada lista los recursos", portada.estado === 200 && !!portada.cuerpo?.recursos);
+  const indice = await pedir("GET", "/api");
+  comprobar("el índice /api lista los recursos", indice.estado === 200 && !!indice.cuerpo?.recursos);
+
+  titulo("Páginas web");
+  for (const [ruta, marca] of [
+    ["/", "API de gestión de fragancias"],
+    ["/panel", "Panel de gestión"],
+    ["/docs", "swagger-ui-bundle.js"]
+  ]) {
+    const pagina = await fetch(`${BASE}${ruta}`);
+    const html = await pagina.text();
+    comprobar(`${ruta} responde 200`, pagina.status === 200, `estado ${pagina.status}`);
+    comprobar(
+      `${ruta} devuelve HTML`,
+      (pagina.headers.get("content-type") ?? "").includes("text/html")
+    );
+    comprobar(`${ruta} trae su contenido`, html.includes(marca));
+  }
 
   titulo("Documentación");
   const spec = await pedir("GET", "/api/openapi.json");
@@ -125,7 +141,8 @@ async function main() {
     (total, ruta) => total + Object.keys(ruta).length,
     0
   );
-  comprobar("describe las 21 operaciones", operaciones === 21, `describe ${operaciones}`);
+  // 21 del CRUD base + 27 del proceso de ventas de la app móvil.
+  comprobar("describe las 48 operaciones", operaciones === 48, `describe ${operaciones}`);
   comprobar(
     "el servidor de la spec apunta a esta API",
     spec.cuerpo?.servers?.[0]?.url === BASE,
@@ -134,9 +151,6 @@ async function main() {
 
   const docs = await fetch(`${BASE}/docs`);
   const html = await docs.text();
-  comprobar("/docs responde 200", docs.status === 200);
-  comprobar("/docs devuelve HTML", (docs.headers.get("content-type") ?? "").includes("text/html"));
-  comprobar("/docs carga Swagger UI", html.includes("swagger-ui-bundle.js"));
   comprobar("/docs apunta a la especificación", html.includes("/api/openapi.json"));
 
   // Marca de tiempo para que los datos de prueba no choquen con los de una

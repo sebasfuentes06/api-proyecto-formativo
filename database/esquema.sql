@@ -26,6 +26,16 @@
 -- Limpieza: permite volver a correr el script sin errores.
 -- El orden importa: primero la tabla que tiene las llaves foráneas.
 -- ------------------------------------------------------------
+-- Primero las tablas de la app móvil (database/movil.sql), que dependen
+-- de estas. Si ya existían, sin esto el DROP de productos fallaría.
+DROP VIEW  IF EXISTS v_ventas_saldo;
+DROP TABLE IF EXISTS wompi_links, pagos, detalle_venta, detalle_pedido,
+                     producto_imagen CASCADE;
+DROP TABLE IF EXISTS ventas, pedidos CASCADE;
+DROP TABLE IF EXISTS usuarios CASCADE;
+DROP SEQUENCE IF EXISTS seq_numero_factura, seq_codigo_pedido;
+DROP FUNCTION IF EXISTS fecha_local(TIMESTAMP), hoy_local();
+
 DROP TABLE IF EXISTS productos;
 DROP TABLE IF EXISTS categorias;
 DROP TABLE IF EXISTS proveedores;

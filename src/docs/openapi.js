@@ -11,6 +11,7 @@
  * operaciones, y verlas juntas en un solo archivo se entiende mejor que
  * repartidas en comentarios por todo el proyecto.
  */
+import { tagsMovil, pathsMovil, seguridad } from "./openapi-movil.js";
 
 /** Campos que comparten las cuatro entidades. */
 const ESTADO = {
@@ -339,7 +340,12 @@ function construirEspecificacion({ url } = {}) {
       version: "1.0.0",
       description: [
         "API REST con operaciones **CRUD** sobre cuatro entidades del sistema de gestión",
-        "de fragancias Essence Don Aire: categorías, proveedores, clientes y productos.",
+        "de fragancias Essence Don Aire: categorías, proveedores, clientes y productos,",
+        "y el **proceso de ventas de la app móvil**: pedidos, ventas con factura,",
+        "pagos y abonos (incluido Wompi) y estado de cuenta.",
+        "",
+        "Los endpoints con candado piden sesión: haz login en `POST /api/auth/login`,",
+        "copia el token y pégalo en **Authorize**.",
         "",
         "Construida con **Node.js + Express + PostgreSQL**, con SQL parametrizado y sin ORM.",
         "",
@@ -367,7 +373,8 @@ function construirEspecificacion({ url } = {}) {
       { name: "Categorías", description: "Tipos de fragancia. Un producto pertenece a una categoría." },
       { name: "Proveedores", description: "Empresas que surten los productos." },
       { name: "Clientes", description: "Personas registradas en la tienda." },
-      { name: "Productos", description: "Las fragancias. Dependen de una categoría y un proveedor." }
+      { name: "Productos", description: "Las fragancias. Dependen de una categoría y un proveedor." },
+      ...tagsMovil
     ],
     paths: {
       "/api/health": {
@@ -508,9 +515,11 @@ function construirEspecificacion({ url } = {}) {
             schema: { type: "string", enum: ["1"] }
           }
         ]
-      })
+      }),
+      ...pathsMovil
     },
     components: {
+      securitySchemes: seguridad,
       schemas: {
         Paginacion: {
           type: "object",

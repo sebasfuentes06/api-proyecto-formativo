@@ -54,7 +54,7 @@ Queda en <http://localhost:3000>. Para comprobarlo, abre
 | `npm start` | La levanta sin recarga automática |
 | `npm run db:setup` | Crea las tablas y carga los datos de ejemplo |
 | `npm run db:seed` | Recarga solo los datos, sin tocar las tablas |
-| `npm run test:api` | Corre 70 pruebas automáticas contra la API |
+| `npm run test:api` | Corre 76 pruebas automáticas contra la API |
 
 ---
 
@@ -73,6 +73,7 @@ src/
 ├── middlewares/           Validación y manejo de errores
 ├── validaciones/          Reglas de cada entidad
 ├── docs/                  Especificación OpenAPI y página de Swagger UI
+├── web/                   Las páginas HTML: portada, panel y estilos compartidos
 ├── utils/                 Paginación, orden, filtros
 ├── app.js                 Arma la aplicación Express
 └── server.js              La arranca
@@ -155,18 +156,34 @@ dónde se guarda la misma información.
 
 Base: `/api`
 
+### Páginas web
+
+Tres rutas devuelven HTML en vez de JSON. Son la cara visible de la API, para
+personas; todo lo demás es para programas.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/` | Portada: qué es la API, sus recursos y cifras en vivo de la base |
+| `GET` | `/panel` | **Panel de gestión**: la API en uso, con CRUD completo |
+| `GET` | `/docs` | **Documentación interactiva** (Swagger UI) |
+
+`/panel` es una aplicación de una sola página que consume esta misma API:
+barra lateral con módulos, un tablero con indicadores y gráfico, y las cuatro
+entidades con búsqueda, filtros, paginación y formularios de creación y
+edición.
+
+No tiene datos propios ni estado guardado: cada pantalla que se abre y cada
+botón que se pulsa es una llamada HTTP. El indicador de la esquina superior
+muestra la última petición con su código, y el tablero guarda el historial.
+Eso hace visible, en vivo, la relación entre la interfaz y la API.
+
 ### Sistema y documentación
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/` | Portada con la lista de recursos |
-| `GET` | `/docs` | **Documentación interactiva** (Swagger UI) |
+| `GET` | `/api` | Índice de la API en JSON |
 | `GET` | `/api/openapi.json` | Especificación OpenAPI 3.0 de toda la API |
 | `GET` | `/api/health` | Estado de la API y de la base de datos |
-
-`/docs` es la única ruta que devuelve HTML: lista las 21 operaciones, permite
-probarlas desde el navegador con **Try it out**, y muestra la respuesta real.
-Es la cara visible de la API, la que se enseña en una sustentación.
 
 `/api/openapi.json` es esa misma información en el formato estándar OpenAPI.
 Sirve para importar toda la colección en Postman o Insomnia de un solo golpe:
@@ -309,7 +326,7 @@ npm run test:api
 
 Recorre las 20 operaciones, los casos que deben fallar (datos inválidos, ids
 inexistentes, valores repetidos, borrados que romperían una relación), los
-filtros y la documentación. Son **70 comprobaciones** y termina con el conteo.
+filtros y la documentación. Son **76 comprobaciones** y termina con el conteo.
 
 Para probar el despliegue en lugar de tu equipo:
 
@@ -319,9 +336,12 @@ API_URL=https://tu-api.vercel.app npm run test:api
 
 ### Desde el navegador
 
-Abre **`/docs`**. Es la forma más cómoda de recorrer la API sin instalar nada:
-se despliega cada operación, se edita el cuerpo de la petición y se ejecuta
-contra el servidor de verdad.
+Dos formas, sin instalar nada:
+
+- **`/docs`** — recorre las operaciones una por una: se despliega cada una, se
+  edita el cuerpo de la petición y se ejecuta contra el servidor de verdad.
+- **`/panel`** — la API usada como la usaría una aplicación real: tablero,
+  módulos, formularios, y el registro de peticiones a la vista.
 
 ### Pruebas manuales
 
@@ -356,6 +376,18 @@ desactualizan en cuanto alguien crea o borra un producto.
 **Validación propia, sin librerías.** Se puede leer de arriba abajo y no
 agrega una dependencia más que explicar.
 
+**Las páginas HTML van incrustadas en el código**, no como archivos en una
+carpeta `public/`. En un despliegue serverless Express no sirve archivos
+estáticos, así que un `.css` o un `.js` enlazados devolverían 404 y las páginas
+se verían sin formato. Por eso los estilos y el JavaScript del cliente viajan
+dentro del HTML que genera el servidor.
+
+**El panel no usa ninguna librería.** Es JavaScript a secas contra `fetch`,
+con las cuatro entidades descritas como configuración —columnas, campos,
+filtros— en vez de cuatro pantallas escritas a mano. Así queda claro que el
+trabajo lo hace la API, no un framework, y que agregar una quinta entidad
+cuesta unas veinte líneas de descripción.
+
 **Swagger UI desde un CDN, no como dependencia.** No es por ahorrar un
 paquete: en un despliegue serverless, Express no sirve archivos estáticos, así
 que `swagger-ui-express` cargaría la página sin estilos ni JavaScript. Trayendo
@@ -367,3 +399,27 @@ solo abre un puerto cuando no está en un entorno serverless. No hay una versió
 "de desarrollo" y otra "de producción" que puedan desincronizarse.
 
 Para publicarla en internet, ver **[DESPLIEGUE.md](./DESPLIEGUE.md)**.
+
+---
+
+## App móvil y proceso de ventas
+
+Además del CRUD, la API sirve a la **app Flutter del administrador**
+(carpeta [`app_movil/`](app_movil/README.md)), con los cinco subprocesos del
+*Proceso Móvil* de la ficha: clientes, catálogo, pedidos, ventas y pagos/abonos.
+
+| Recurso | Qué hace |
+|---|---|
+| `POST /api/auth/login` | Login del administrador (JWT + bcrypt) |
+| `/api/pedidos` | Pedidos temporales; `POST /:id/convertir` los vuelve venta |
+| `/api/ventas` | Ventas con número de factura `FV-000001`; descuentan stock con bloqueo de filas; `POST /:id/anular` devuelve el stock |
+| `/api/pagos` | Pagos totales y abonos; `GET /pendientes` es el reporte de cartera |
+| `/api/pagos/wompi/links` | Link de pago de Wompi; el abono entra por `POST /api/webhooks/wompi` (firma SHA-256) |
+| `/api/clientes/:id/historial` y `/estado-cuenta` | Historial de compras y saldo del cliente |
+| `/api/productos/:id/imagen` | Foto del producto (se guarda en PostgreSQL) |
+| `/api/dashboard/resumen` | Ventas del día y del mes, cartera, pedidos pendientes, stock bajo |
+
+Las tablas nuevas están en `database/movil.sql` (se aplica con
+`npm run db:movil` sobre una base existente). Pruebas: `npm run test:movil`
+(75 comprobaciones del proceso completo; con `WOMPI_SIMULADO=1` también simula
+Wompi). El paso a paso del despliegue está en `DESPLIEGUE.md`, parte 6.

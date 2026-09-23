@@ -4,6 +4,8 @@ import morgan from "morgan";
 import { env } from "./config/env.js";
 import rutas from "./routes/index.js";
 import { paginaDocumentacion } from "./docs/pagina.js";
+import { paginaInicio } from "./web/inicio.js";
+import { paginaPanel } from "./web/panel.js";
 import { noEncontrado, manejadorErrores } from "./middlewares/errores.js";
 
 /**
@@ -30,30 +32,30 @@ app.use(
 app.use(morgan(env.entorno === "production" ? "combined" : "dev"));
 
 // 3. Lectura del cuerpo JSON. Sin esto, req.body llega vacío en los POST.
-app.use(express.json());
+// El límite sube a 3 MB por las fotos de productos que manda la app móvil
+// (van en base64 dentro del JSON). Vercel acepta hasta 4,5 MB por petición.
+app.use(express.json({ limit: "3mb" }));
 
-// 4. Documentación interactiva. Es la única ruta que devuelve HTML en vez de
-//    JSON: es la cara visible de la API, pensada para personas.
-app.get("/docs", (_req, res) => {
-  res.type("html").send(paginaDocumentacion("/api/openapi.json"));
+/**
+ * 4. Las tres páginas HTML. Son la cara visible de la API, para personas.
+ *
+ * El HTML va incrustado en el código, no como archivos en una carpeta: en un
+ * despliegue serverless Express no sirve archivos estáticos, así que un .css
+ * o un .js enlazados devolverían 404 y las páginas se verían sin formato.
+ *
+ * El JSON de la portada no desapareció: vive en /api, que es lo que recibe
+ * quien consulte con curl o desde código.
+ */
+app.get("/", (_req, res) => {
+  res.type("html").send(paginaInicio());
 });
 
-// 5. Portada. Abrir la raíz en el navegador debe decir algo útil, no un 404.
-app.get("/", (_req, res) => {
-  res.json({
-    nombre: "API Proyecto Formativo - Essence Don Aire",
-    version: "1.0.0",
-    descripcion: "API REST con operaciones CRUD sobre categorías, proveedores, clientes y productos.",
-    documentacion: "/docs",
-    especificacion: "/api/openapi.json",
-    estado: "/api/health",
-    recursos: {
-      categorias: "/api/categorias",
-      proveedores: "/api/proveedores",
-      clientes: "/api/clientes",
-      productos: "/api/productos"
-    }
-  });
+app.get("/panel", (_req, res) => {
+  res.type("html").send(paginaPanel());
+});
+
+app.get("/docs", (_req, res) => {
+  res.type("html").send(paginaDocumentacion("/api/openapi.json"));
 });
 
 // 6. Las rutas de la API, todas bajo /api.

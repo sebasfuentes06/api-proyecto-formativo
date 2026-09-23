@@ -17,8 +17,10 @@ const SELECT_BASE = `
          p.precio, p.stock, p.stock_minimo, p.estado, p.fecha_creacion,
          p.id_categoria, c.nombre AS categoria,
          p.id_proveedor, pr.nombre AS proveedor,
-         (p.stock <= p.stock_minimo) AS stock_bajo
+         (p.stock <= p.stock_minimo) AS stock_bajo,
+         img.actualizada_en AS imagen_actualizada
     FROM productos p
+    LEFT JOIN producto_imagen img ON img.id_producto = p.id_producto
     JOIN categorias  c  ON c.id_categoria  = p.id_categoria
     JOIN proveedores pr ON pr.id_proveedor = p.id_proveedor
 `;

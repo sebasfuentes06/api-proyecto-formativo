@@ -27,10 +27,14 @@ const proveedor = {
 
 const cliente = {
   nombre: { etiqueta: "El nombre", requerido: true, texto: { max: 150 } },
-  correo: { etiqueta: "El correo", requerido: true, correo: true, texto: { max: 100 } },
+  // Opcional: la ficha pide nombre, dirección y teléfono; el correo no
+  // siempre lo da un cliente que escribe por WhatsApp.
+  correo: { etiqueta: "El correo", correo: true, texto: { max: 100 } },
   telefono: { etiqueta: "El teléfono", telefono: true },
   direccion: { etiqueta: "La dirección", texto: { max: 150 } },
   ciudad: { etiqueta: "La ciudad", texto: { max: 100 } },
+  documento: { etiqueta: "El documento", texto: { max: 20 } },
+  notas: { etiqueta: "Las notas", texto: { max: 250 } },
   estado: { etiqueta: "El estado", booleano: true }
 };
 
