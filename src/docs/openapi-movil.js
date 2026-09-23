@@ -23,7 +23,8 @@ const tagsMovil = [
   { name: "Ventas", description: "Ventas confirmadas con factura automática. Descuentan stock en tiempo real." },
   { name: "Pagos", description: "Pagos totales o parciales (abonos), cartera pendiente y Wompi." },
   { name: "Cuentas de cliente", description: "Historial de compras y estado de cuenta." },
-  { name: "Dashboard", description: "Indicadores para la pantalla principal de la app." }
+  { name: "Dashboard", description: "Indicadores para la pantalla principal de la app." },
+  { name: "Usuarios", description: "Cuentas de la app y sus roles: Administrador, Vendedor y Cliente. Solo Administrador." }
 ];
 
 const pathsMovil = {
@@ -102,6 +103,26 @@ const pathsMovil = {
     get: { tags: ["Productos"], summary: "Foto del producto (pública)", parameters: [ID], responses: { 200: { description: "Imagen", content: { "image/jpeg": {} } }, 404: errores[404] } },
     put: { tags: ["Productos"], summary: "Subir o reemplazar la foto (base64)", security: SESION, parameters: [ID], requestBody: cuerpo({ base64: "/9j/4AAQSkZJRg...", tipo_mime: "image/jpeg" }), responses: { 200: ok("Guardada"), 400: errores[400], 413: { description: "Demasiado pesada" } } },
     delete: { tags: ["Productos"], summary: "Quitar la foto", security: SESION, parameters: [ID], responses: { 200: ok("Eliminada"), 404: errores[404] } }
+  },
+  "/api/usuarios": {
+    get: { tags: ["Usuarios"], summary: "Listar usuarios", security: SESION, parameters: [q("search", "Nombre o correo"), q("rol", "Administrador | Vendedor | Cliente"), q("status", "active | inactive")], responses: { 200: ok("Listado"), 403: { description: "Solo Administrador" } } },
+    post: {
+      tags: ["Usuarios"], summary: "Crear usuario", security: SESION,
+      description: "Un usuario con rol Cliente debe llevar id_cliente (su ficha). Una ficha tiene como máximo un usuario.",
+      requestBody: cuerpo({ nombre: "Carlos Vendedor", correo: "carlos@essence.com", password: "Clave12345", rol: "Vendedor" }),
+      responses: { 201: ok("Creado"), ...errores }
+    }
+  },
+  "/api/usuarios/{id}": {
+    put: {
+      tags: ["Usuarios"], summary: "Editar usuario (nombre, correo, rol, estado, ficha)", security: SESION, parameters: [ID],
+      description: "No deja desactivar ni quitarle el rol al único Administrador activo.",
+      requestBody: cuerpo({ rol: "Cliente", id_cliente: 3, estado: true }),
+      responses: { 200: ok("Actualizado"), ...errores }
+    }
+  },
+  "/api/usuarios/{id}/password": {
+    put: { tags: ["Usuarios"], summary: "Restablecer la contraseña de un usuario", security: SESION, parameters: [ID], requestBody: cuerpo({ nueva: "NuevaClave2026" }), responses: { 200: ok("Restablecida"), 400: errores[400] } }
   },
   "/api/dashboard/resumen": { get: { tags: ["Dashboard"], summary: "Ventas de hoy y del mes, cartera, pedidos pendientes, stock bajo y más vendidos", security: SESION, responses: { 200: ok("Resumen") } } }
 };

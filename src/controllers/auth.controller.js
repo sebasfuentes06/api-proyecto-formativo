@@ -7,20 +7,20 @@ import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 /**
  * Autenticación de la app móvil.
  *
- * La ficha del proyecto dice que la app la usa el administrador, así que
- * solo entran usuarios con rol Administrador y estado activo.
+ * Entran los tres roles del proyecto (Administrador, Vendedor, Cliente) si el
+ * usuario está activo. Lo que cada uno puede hacer lo deciden las rutas.
  */
 
 function firmar(usuario) {
   if (!env.jwtSecreto) throw new ErrorHttp(500, "Falta configurar JWT_SECRETO en el servidor.");
   return jwt.sign(
-    { sub: usuario.id_usuario, nombre: usuario.nombre, rol: usuario.rol },
+    { sub: usuario.id_usuario, nombre: usuario.nombre, rol: usuario.rol, id_cliente: usuario.id_cliente ?? null },
     env.jwtSecreto,
     { expiresIn: env.jwtDuracion }
   );
 }
 
-const publico = ({ id_usuario, nombre, correo, rol }) => ({ id_usuario, nombre, correo, rol });
+const publico = ({ id_usuario, nombre, correo, rol, id_cliente }) => ({ id_usuario, nombre, correo, rol, id_cliente: id_cliente ?? null });
 
 /** POST /api/auth/login */
 const login = asyncHandler(async (req, res) => {
@@ -34,10 +34,7 @@ const login = asyncHandler(async (req, res) => {
   // falló le confirma a un atacante qué correos están registrados.
   const claveOk = usuario ? await bcrypt.compare(password, usuario.password_hash) : false;
   if (!usuario || !claveOk) throw new ErrorHttp(401, "Correo o contraseña incorrectos.");
-  if (!usuario.estado) throw new ErrorHttp(403, "Tu usuario está inactivo.");
-  if (usuario.rol !== "Administrador") {
-    throw new ErrorHttp(403, "La app móvil es de uso exclusivo del administrador.");
-  }
+  if (!usuario.estado) throw new ErrorHttp(403, "Tu usuario está inactivo. Habla con la administradora.");
 
   await query("UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id_usuario = $1", [usuario.id_usuario]);
 

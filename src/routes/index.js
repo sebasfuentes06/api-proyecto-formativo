@@ -10,7 +10,9 @@ import auth from "./auth.routes.js";
 import pedidos from "./pedidos.routes.js";
 import ventas from "./ventas.routes.js";
 import pagos from "./pagos.routes.js";
-import { requiereSesion } from "../middlewares/auth.js";
+import usuarios from "./usuarios.routes.js";
+import { requiereSesion, permitir, rolesSiHaySesion } from "../middlewares/auth.js";
+import { ErrorHttp } from "../middlewares/errores.js";
 import { validarId } from "../middlewares/validar.js";
 import cuentas from "../controllers/cuentas.controller.js";
 import imagenes from "../controllers/imagenes.controller.js";
@@ -57,6 +59,7 @@ router.get("/", (_req, res) => {
       dashboard: "/api/dashboard/resumen",
       estadoDeCuenta: "/api/clientes/:id/estado-cuenta",
       historialDeCompras: "/api/clientes/:id/historial",
+      usuarios: "/api/usuarios (solo Administrador)",
       webhookWompi: "POST /api/webhooks/wompi"
     }
   });
@@ -105,8 +108,8 @@ router.use("/auth", auth);
 // La imagen se consulta sin sesión (se usa en <img> y al compartir por
 // WhatsApp); subirla o borrarla sí exige sesión.
 router.get("/productos/:id/imagen", validarId, imagenes.obtener);
-router.put("/productos/:id/imagen", requiereSesion, validarId, imagenes.guardar);
-router.delete("/productos/:id/imagen", requiereSesion, validarId, imagenes.eliminar);
+router.put("/productos/:id/imagen", requiereSesion, permitir("Administrador"), validarId, imagenes.guardar);
+router.delete("/productos/:id/imagen", requiereSesion, permitir("Administrador"), validarId, imagenes.eliminar);
 
 router.get("/clientes/:id/historial", requiereSesion, validarId, cuentas.historial);
 router.get("/clientes/:id/estado-cuenta", requiereSesion, validarId, cuentas.estadoCuenta);
@@ -114,15 +117,39 @@ router.get("/clientes/:id/estado-cuenta", requiereSesion, validarId, cuentas.est
 router.use("/pedidos", requiereSesion, pedidos);
 router.use("/ventas", requiereSesion, ventas);
 router.use("/pagos", requiereSesion, pagos);
-router.get("/dashboard/resumen", requiereSesion, dashboard.resumen);
+router.get("/dashboard/resumen", requiereSesion, permitir("Administrador", "Vendedor"), dashboard.resumen);
+router.use("/usuarios", requiereSesion, permitir("Administrador"), usuarios);
 
 // Lo llama Wompi: no lleva sesión, lleva firma (se verifica adentro).
 router.post("/webhooks/wompi", pagosControlador.wompiWebhook);
 
 // --- CRUD base del proyecto formativo ---------------------------
-router.use("/categorias", categorias);
-router.use("/proveedores", proveedores);
-router.use("/clientes", clientes);
-router.use("/productos", productos);
+// Sin token siguen abiertas (panel web y pruebas del CRUD). Con token (la
+// app), se aplican los roles:
+//   catálogo (categorías, proveedores, productos): leen todos, escribe el Administrador
+//   clientes: el equipo los ve, crea y edita; activar/desactivar y borrar es del Administrador
+const escribeSolo = (...roles) => (req, res, next) =>
+  req.method === "GET" ? next() : rolesSiHaySesion(...roles)(req, res, next);
+
+function reglasClientes(req, res, next) {
+  const metodo = req.method;
+  const reglas = metodo === "DELETE" ? ["Administrador"] : ["Administrador", "Vendedor"];
+  rolesSiHaySesion(...reglas)(req, res, (error) => {
+    if (error) {
+      // Un Cliente sí puede leer su propia ficha.
+      const propia = metodo === "GET" && req.usuario?.rol === "Cliente" && req.path === `/${req.usuario.idCliente}`;
+      return propia ? next() : next(error);
+    }
+    if (req.usuario?.rol === "Vendedor" && metodo !== "GET" && req.body?.estado !== undefined) {
+      return next(new ErrorHttp(403, "Solo el Administrador puede activar o desactivar clientes."));
+    }
+    next();
+  });
+}
+
+router.use("/categorias", escribeSolo("Administrador"), categorias);
+router.use("/proveedores", escribeSolo("Administrador"), proveedores);
+router.use("/clientes", reglasClientes, clientes);
+router.use("/productos", escribeSolo("Administrador"), productos);
 
 export default router;

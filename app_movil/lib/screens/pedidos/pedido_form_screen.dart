@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
@@ -38,6 +39,12 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   void initState() {
     super.initState();
     _cliente = widget.cliente;
+    // El Cliente siempre pide para sí mismo (la API lo fuerza igual).
+    final u = Sesion.i.usuario;
+    if (Sesion.i.esCliente && u?.idCliente != null) {
+      _cliente = Cliente(id: u!.idCliente!, nombre: u.nombre);
+      _canal = 'app';
+    }
     if (widget.productoInicial != null) _lineas.add(LineaCarrito(widget.productoInicial!));
     if (_editando) {
       _cargandoEdicion = true;
@@ -89,7 +96,7 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
     }
     final datos = {
       'id_cliente': _cliente!.id,
-      'canal': _canal,
+      if (!Sesion.i.esCliente) 'canal': _canal,
       'direccion_entrega': _direccion.text.trim(),
       'notas': _notas.text.trim(),
       'items': _lineas.map((l) => l.aJson()).toList(),
@@ -112,7 +119,7 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(_editando ? 'Editar ${widget.pedido!.codigo}' : 'Nuevo pedido')),
+      appBar: AppBar(title: Text(_editando ? 'Editar ${widget.pedido!.codigo}' : (Sesion.i.esCliente ? 'Hacer pedido' : 'Nuevo pedido'))),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -135,28 +142,32 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       body: _cargandoEdicion
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.only(bottom: 24), children: [
-              const TituloSeccion('Cliente'),
-              Card(
-                child: ListTile(
-                  leading: CircleAvatar(child: _cliente == null ? const Icon(Icons.person_search) : Text(_cliente!.iniciales)),
-                  title: Text(_cliente?.nombre ?? 'Elegir cliente'),
-                  subtitle: _cliente == null ? const Text('Toca para buscar o registrar') : Text(_cliente!.telefono ?? ''),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _elegirCliente,
+              // El Cliente no elige cliente ni canal: pide para sí, por la app.
+              if (!Sesion.i.esCliente) ...[
+                const TituloSeccion('Cliente'),
+                Card(
+                  child: ListTile(
+                    leading: CircleAvatar(child: _cliente == null ? const Icon(Icons.person_search) : Text(_cliente!.iniciales)),
+                    title: Text(_cliente?.nombre ?? 'Elegir cliente'),
+                    subtitle: _cliente == null ? const Text('Toca para buscar o registrar') : Text(_cliente!.telefono ?? ''),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _elegirCliente,
+                  ),
                 ),
-              ),
-              const TituloSeccion('Canal'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'whatsapp', label: Text('WhatsApp'), icon: Icon(Icons.chat)),
-                    ButtonSegment(value: 'punto_fisico', label: Text('Punto físico'), icon: Icon(Icons.storefront)),
-                  ],
-                  selected: {_canal},
-                  onSelectionChanged: (s) => setState(() => _canal = s.first),
+                const TituloSeccion('Canal'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'whatsapp', label: Text('WhatsApp'), icon: Icon(Icons.chat)),
+                      ButtonSegment(value: 'punto_fisico', label: Text('Punto físico'), icon: Icon(Icons.storefront)),
+                    ],
+                    // Un pedido que hizo el cliente por la app se deja como está.
+                    selected: {_canal == 'app' ? 'whatsapp' : _canal},
+                    onSelectionChanged: (s) => setState(() => _canal = s.first),
+                  ),
                 ),
-              ),
+              ],
               const TituloSeccion('Productos'),
               EditorCarrito(lineas: _lineas, onCambio: () => setState(() {})),
               const TituloSeccion('Entrega'),

@@ -3,6 +3,7 @@ import ventas from "../models/ventas.model.js";
 import { transaccion } from "../db/pool.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { respuestaListado } from "../utils/consulta.js";
+import { esCliente } from "../middlewares/auth.js";
 import {
   CANALES,
   redondear,
@@ -36,14 +37,20 @@ async function guardarDetalle(db, idPedido, items) {
 
 function validarCanal(canal) {
   if (canal !== undefined && !CANALES.includes(canal)) {
-    throw new ErrorHttp(400, "Canal no válido.", { canal: "whatsapp o punto_fisico" });
+    throw new ErrorHttp(400, "Canal no válido.", { canal: CANALES.join(", ") });
   }
 }
 
-/** Trae el pedido bloqueado y exige que siga pendiente. */
-async function pedidoPendiente(db, id) {
+/**
+ * Trae el pedido bloqueado y exige que siga pendiente. Si quien pide es un
+ * Cliente, además tiene que ser suyo: si no, se responde 404 (no se le dice
+ * que el pedido existe).
+ */
+async function pedidoPendiente(db, id, req) {
   const { rows } = await db.query("SELECT * FROM pedidos WHERE id_pedido = $1 FOR UPDATE", [id]);
-  if (!rows[0]) throw new ErrorHttp(404, "No existe un pedido con ese id.");
+  if (!rows[0] || (esCliente(req) && rows[0].id_cliente !== req.usuario.idCliente)) {
+    throw new ErrorHttp(404, "No existe un pedido con ese id.");
+  }
   if (rows[0].estado !== "pendiente") {
     throw new ErrorHttp(409, `El pedido ${rows[0].codigo} ya está ${rows[0].estado}; solo se modifican pedidos pendientes.`);
   }
@@ -52,29 +59,35 @@ async function pedidoPendiente(db, id) {
 
 /** GET /api/pedidos */
 const listar = asyncHandler(async (req, res) => {
-  const { filas, total, pagina, porPagina } = await modelo.listar(req.query);
+  // Un Cliente solo ve sus pedidos, mande el filtro que mande.
+  const filtros = esCliente(req) ? { ...req.query, id_cliente: req.usuario.idCliente } : req.query;
+  const { filas, total, pagina, porPagina } = await modelo.listar(filtros);
   res.json(respuestaListado(filas, total, { pagina, porPagina }));
 });
 
 /** GET /api/pedidos/:id */
 const obtener = asyncHandler(async (req, res) => {
   const pedido = await modelo.obtenerPorId(req.idNumerico);
-  if (!pedido) throw new ErrorHttp(404, "No existe un pedido con ese id.");
+  if (!pedido || (esCliente(req) && pedido.id_cliente !== req.usuario.idCliente)) {
+    throw new ErrorHttp(404, "No existe un pedido con ese id.");
+  }
   res.json({ ok: true, datos: pedido });
 });
 
 /** POST /api/pedidos  { id_cliente, canal, items, direccion_entrega?, notas? } */
 const crear = asyncHandler(async (req, res) => {
-  validarCanal(req.body.canal);
+  // El Cliente pide para sí mismo y por la app; no escoge cliente ni canal.
+  const cuerpo = esCliente(req) ? { ...req.body, id_cliente: req.usuario.idCliente, canal: "app" } : req.body;
+  validarCanal(cuerpo.canal);
   const id = await transaccion(async (db) => {
-    const cliente = await clienteActivo(db, req.body.id_cliente);
+    const cliente = await clienteActivo(db, cuerpo.id_cliente);
     // Se exige stock suficiente al tomar el pedido: prometerle al cliente un
     // producto que no hay es justo el problema que describe la ficha.
-    const items = await revisarProductos(db, normalizarItems(req.body.items));
+    const items = await revisarProductos(db, normalizarItems(cuerpo.items));
     const { rows } = await db.query(
       `INSERT INTO pedidos (id_cliente, canal, direccion_entrega, notas, id_usuario)
        VALUES ($1, $2, $3, $4, $5) RETURNING id_pedido`,
-      [cliente.id_cliente, req.body.canal ?? "whatsapp", req.body.direccion_entrega?.trim() || null, req.body.notas?.trim() || null, req.usuario.id]
+      [cliente.id_cliente, cuerpo.canal ?? "whatsapp", cuerpo.direccion_entrega?.trim() || null, cuerpo.notas?.trim() || null, req.usuario.id]
     );
     await guardarDetalle(db, rows[0].id_pedido, items);
     return rows[0].id_pedido;
@@ -85,10 +98,11 @@ const crear = asyncHandler(async (req, res) => {
 
 /** PUT /api/pedidos/:id — solo pendientes. items, si viene, reemplaza el detalle. */
 const actualizar = asyncHandler(async (req, res) => {
-  validarCanal(req.body.canal);
+  const cuerpo = esCliente(req) ? { ...req.body, id_cliente: undefined, canal: undefined } : req.body;
+  validarCanal(cuerpo.canal);
   await transaccion(async (db) => {
-    const pedido = await pedidoPendiente(db, req.idNumerico);
-    const idCliente = req.body.id_cliente ? (await clienteActivo(db, req.body.id_cliente)).id_cliente : pedido.id_cliente;
+    const pedido = await pedidoPendiente(db, req.idNumerico, req);
+    const idCliente = cuerpo.id_cliente ? (await clienteActivo(db, cuerpo.id_cliente)).id_cliente : pedido.id_cliente;
     await db.query(
       `UPDATE pedidos
           SET id_cliente = $2,
@@ -100,15 +114,15 @@ const actualizar = asyncHandler(async (req, res) => {
       [
         pedido.id_pedido,
         idCliente,
-        req.body.canal ?? null,
-        req.body.direccion_entrega !== undefined,
-        req.body.direccion_entrega?.trim() || null,
-        req.body.notas !== undefined,
-        req.body.notas?.trim() || null
+        cuerpo.canal ?? null,
+        cuerpo.direccion_entrega !== undefined,
+        cuerpo.direccion_entrega?.trim() || null,
+        cuerpo.notas !== undefined,
+        cuerpo.notas?.trim() || null
       ]
     );
-    if (req.body.items !== undefined) {
-      const items = await revisarProductos(db, normalizarItems(req.body.items));
+    if (cuerpo.items !== undefined) {
+      const items = await revisarProductos(db, normalizarItems(cuerpo.items));
       await guardarDetalle(db, pedido.id_pedido, items);
     }
   });
@@ -119,7 +133,7 @@ const actualizar = asyncHandler(async (req, res) => {
 /** POST /api/pedidos/:id/cancelar */
 const cancelar = asyncHandler(async (req, res) => {
   await transaccion(async (db) => {
-    const pedido = await pedidoPendiente(db, req.idNumerico);
+    const pedido = await pedidoPendiente(db, req.idNumerico, req);
     const nota = req.body?.motivo ? `Cancelado: ${String(req.body.motivo).trim()}` : null;
     await db.query(
       `UPDATE pedidos SET estado = 'cancelado', actualizado_en = CURRENT_TIMESTAMP,
@@ -140,7 +154,7 @@ const cancelar = asyncHandler(async (req, res) => {
  */
 const convertir = asyncHandler(async (req, res) => {
   const idVenta = await transaccion(async (db) => {
-    const pedido = await pedidoPendiente(db, req.idNumerico);
+    const pedido = await pedidoPendiente(db, req.idNumerico, req);
     const { rows: items } = await db.query(
       "SELECT id_producto, cantidad, precio_unitario FROM detalle_pedido WHERE id_pedido = $1",
       [pedido.id_pedido]

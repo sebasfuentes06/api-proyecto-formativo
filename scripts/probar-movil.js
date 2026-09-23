@@ -285,6 +285,119 @@ async function main() {
   comprobar("anular una venta que vino de un pedido cancela el pedido", r.cuerpo?.datos?.estado === "cancelado");
 
   // ------------------------------------------------------------------
+  titulo("Roles: usuarios, Vendedor y Cliente");
+  const tokenAdmin = token;
+  const como = async (t, metodo, ruta, cuerpo) => {
+    const previo = token;
+    token = t;
+    try {
+      return await pedir(metodo, ruta, cuerpo);
+    } finally {
+      token = previo;
+    }
+  };
+
+  r = await pedir("POST", "/api/usuarios", { nombre: "Sin ficha", correo: `sinficha${marca}@essence.com`, password: "Clave12345", rol: "Cliente" });
+  comprobar("usuario Cliente sin ficha de cliente: 400", r.estado === 400, r.cuerpo);
+  r = await pedir("POST", "/api/usuarios", { nombre: "Rol raro", correo: `raro${marca}@essence.com`, password: "Clave12345", rol: "Supervisor" });
+  comprobar("rol inexistente: 400", r.estado === 400);
+
+  r = await pedir("POST", "/api/usuarios", { nombre: `Vendedor ${marca}`, correo: `vendedor${marca}@essence.com`, password: "Clave12345", rol: "Vendedor" });
+  comprobar("crear usuario Vendedor: 201", r.estado === 201, r.cuerpo);
+  const idVendedor = r.cuerpo?.datos?.id_usuario;
+  r = await pedir("POST", "/api/usuarios", { nombre: `Cliente ${marca}`, correo: `cliente${marca}@essence.com`, password: "Clave12345", rol: "Cliente", id_cliente: idCliente });
+  comprobar("crear usuario Cliente enlazado a su ficha: 201", r.estado === 201 && r.cuerpo?.datos?.id_cliente === idCliente, r.cuerpo);
+  const idUsuarioCliente = r.cuerpo?.datos?.id_usuario;
+  r = await pedir("POST", "/api/usuarios", { nombre: "Otro", correo: `otro${marca}@essence.com`, password: "Clave12345", rol: "Cliente", id_cliente: idCliente });
+  comprobar("la misma ficha no puede tener dos usuarios: 409", r.estado === 409);
+  r = await pedir("GET", "/api/usuarios?limit=50");
+  comprobar("listar usuarios (Administrador)", r.estado === 200 && r.cuerpo?.datos?.some((u) => u.id_usuario === idVendedor));
+
+  const login = async (correo) => (await pedir("POST", "/api/auth/login", { correo, password: "Clave12345" })).cuerpo?.datos;
+  const sesionV = await login(`vendedor${marca}@essence.com`);
+  const sesionC = await login(`cliente${marca}@essence.com`);
+  comprobar("el Vendedor inicia sesión", sesionV?.usuario?.rol === "Vendedor");
+  comprobar("el Cliente inicia sesión y trae su id_cliente", sesionC?.usuario?.rol === "Cliente" && sesionC?.usuario?.id_cliente === idCliente);
+  const tV = sesionV?.token;
+  const tC = sesionC?.token;
+
+  // --- Vendedor
+  r = await como(tV, "GET", "/api/usuarios");
+  comprobar("Vendedor no gestiona usuarios (403)", r.estado === 403);
+  r = await como(tV, "PUT", `/api/productos/${pA.id_producto}`, { precio: 1 });
+  comprobar("Vendedor no edita el catálogo (403)", r.estado === 403);
+  r = await como(tV, "PUT", `/api/productos/${pA.id_producto}/imagen`, { base64: png1x1, tipo_mime: "image/png" });
+  comprobar("Vendedor no cambia fotos (403)", r.estado === 403);
+  r = await como(tV, "PUT", `/api/clientes/${idCliente}`, { direccion: "Calle nueva 1" });
+  comprobar("Vendedor sí edita datos de un cliente", r.estado === 200, r.cuerpo);
+  r = await como(tV, "PUT", `/api/clientes/${idCliente}`, { estado: false });
+  comprobar("Vendedor no desactiva clientes (403)", r.estado === 403);
+  r = await como(tV, "POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("Vendedor registra una venta", r.estado === 201, r.cuerpo);
+  const ventaVendedor = r.cuerpo?.datos;
+  r = await como(tV, "POST", "/api/pagos", { id_venta: ventaVendedor?.id_venta, monto: 10000, metodo: "efectivo" });
+  comprobar("Vendedor registra un abono", r.estado === 201);
+  const abonoVendedor = r.cuerpo?.datos?.pago;
+  r = await como(tV, "POST", `/api/pagos/${abonoVendedor?.id_pago}/anular`, { motivo: "prueba" });
+  comprobar("Vendedor no anula pagos (403)", r.estado === 403);
+  r = await como(tV, "POST", `/api/ventas/${ventaVendedor?.id_venta}/anular`, { motivo: "prueba" });
+  comprobar("Vendedor no anula ventas (403)", r.estado === 403);
+  r = await como(tV, "GET", "/api/dashboard/resumen");
+  comprobar("el resumen del Vendedor es solo de sus ventas", r.cuerpo?.datos?.alcance === "mis_ventas" && Number(r.cuerpo?.datos?.ventas_hoy) === 100000, r.cuerpo?.datos);
+
+  // --- Cliente
+  r = await como(tC, "GET", "/api/clientes");
+  comprobar("Cliente no ve la lista de clientes (403)", r.estado === 403);
+  r = await como(tC, "GET", `/api/clientes/${idCliente}`);
+  comprobar("Cliente sí ve su propia ficha", r.estado === 200);
+  const { cuerpo: otros } = await pedir("GET", "/api/clientes?limit=5");
+  const otroCliente = otros?.datos?.find((c) => c.id_cliente !== idCliente)?.id_cliente;
+  r = await como(tC, "GET", `/api/clientes/${otroCliente}/estado-cuenta`);
+  comprobar("Cliente no ve el estado de cuenta de otro (404)", r.estado === 404);
+  r = await como(tC, "GET", `/api/clientes/${idCliente}/estado-cuenta`);
+  comprobar("Cliente ve su estado de cuenta", r.estado === 200 && r.cuerpo?.datos?.cliente?.id_cliente === idCliente);
+  r = await como(tC, "GET", "/api/ventas?limit=100");
+  comprobar("Cliente solo ve sus compras", r.estado === 200 && r.cuerpo?.datos?.length > 0 && r.cuerpo.datos.every((v) => v.id_cliente === idCliente));
+  r = await como(tC, "GET", "/api/pagos?limit=100");
+  comprobar("Cliente solo ve sus pagos", r.estado === 200 && r.cuerpo?.datos?.every((p) => p.id_cliente === idCliente));
+  r = await como(tC, "POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("Cliente no registra ventas (403)", r.estado === 403);
+  r = await como(tC, "POST", "/api/pagos", { id_venta: ventaVendedor?.id_venta, monto: 1000, metodo: "efectivo" });
+  comprobar("Cliente no registra abonos a mano (403)", r.estado === 403);
+  r = await como(tC, "GET", "/api/pagos/pendientes");
+  comprobar("Cliente no ve la cartera del negocio (403)", r.estado === 403);
+  r = await como(tC, "GET", "/api/dashboard/resumen");
+  comprobar("Cliente no ve el resumen del negocio (403)", r.estado === 403);
+  r = await como(tC, "POST", "/api/pedidos", { id_cliente: otroCliente, canal: "punto_fisico", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("pedido del Cliente queda a su nombre y por canal app", r.estado === 201 && r.cuerpo?.datos?.id_cliente === idCliente && r.cuerpo?.datos?.canal === "app", r.cuerpo);
+  const pedidoCliente = r.cuerpo?.datos;
+  r = await como(tC, "POST", `/api/pedidos/${pedidoCliente?.id_pedido}/convertir`, {});
+  comprobar("Cliente no convierte su pedido en venta (403)", r.estado === 403);
+  r = await como(tC, "POST", `/api/pedidos/${pedidoCliente?.id_pedido}/cancelar`, { motivo: "Ya no lo quiero" });
+  comprobar("Cliente cancela su propio pedido", r.estado === 200);
+  r = await como(tC, "GET", "/api/pedidos?limit=100");
+  comprobar("Cliente solo ve sus pedidos", r.estado === 200 && r.cuerpo?.datos?.every((p) => p.id_cliente === idCliente));
+  r = await como(tC, "GET", "/api/productos?limit=5");
+  comprobar("Cliente ve el catálogo", r.estado === 200 && r.cuerpo?.datos?.length > 0);
+
+  // --- Resguardos de usuarios
+  r = await pedir("GET", "/api/usuarios?rol=Administrador&status=active&limit=100");
+  const admins = r.cuerpo?.datos ?? [];
+  if (admins.length === 1) {
+    r = await pedir("PUT", `/api/usuarios/${admins[0].id_usuario}`, { estado: false });
+    comprobar("no se puede desactivar al único administrador (409)", r.estado === 409);
+  }
+  r = await pedir("PUT", `/api/usuarios/${idVendedor}/password`, { nueva: "OtraClave99" });
+  comprobar("el Administrador restablece una contraseña", r.estado === 200);
+  r = await pedir("POST", "/api/auth/login", { correo: `vendedor${marca}@essence.com`, password: "OtraClave99" });
+  comprobar("la contraseña nueva funciona", r.estado === 200);
+  for (const id of [idVendedor, idUsuarioCliente]) await pedir("PUT", `/api/usuarios/${id}`, { estado: false });
+  r = await pedir("POST", "/api/auth/login", { correo: `vendedor${marca}@essence.com`, password: "OtraClave99" });
+  comprobar("un usuario desactivado ya no entra (403)", r.estado === 403);
+  if (ventaVendedor) await pedir("POST", `/api/ventas/${ventaVendedor.id_venta}/anular`, { motivo: "Limpieza de pruebas" });
+  token = tokenAdmin;
+
+  // ------------------------------------------------------------------
   titulo("Wompi");
   r = await pedir("GET", "/api/pagos/wompi");
   comprobar("estado de configuración de Wompi", r.estado === 200 && typeof r.cuerpo?.datos?.links === "boolean");

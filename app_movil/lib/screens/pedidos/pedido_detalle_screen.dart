@@ -5,6 +5,7 @@ import '../../core/api.dart';
 import '../../core/contacto.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
@@ -134,14 +135,18 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: p.pendiente
+          // Convertir en venta es del equipo; el cliente solo ve el estado.
+          child: p.pendiente && Sesion.i.esEquipo
               ? FilledButton.icon(
                   onPressed: _convertir,
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                   icon: const Icon(Icons.point_of_sale),
                   label: const Text('Convertir en venta'),
                 )
-              : p.idVenta != null && p.estado == 'confirmado'
+              : p.pendiente
+                  ? Text('Tu pedido está pendiente. Te confirmaremos por WhatsApp.',
+                      textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.outline))
+                  : p.idVenta != null && p.estado == 'confirmado'
                   ? FilledButton.tonalIcon(
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VentaDetalleScreen(idVenta: p.idVenta!))),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
@@ -176,7 +181,7 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
               leading: const CircleAvatar(child: Icon(Icons.person)),
               title: Text(p.cliente),
               subtitle: Text([p.clienteTelefono, p.direccionEntrega ?? p.clienteDireccion].whereType<String>().where((s) => s.isNotEmpty).join('\n')),
-              trailing: p.clienteTelefono == null
+              trailing: p.clienteTelefono == null || !Sesion.i.esEquipo
                   ? null
                   : IconButton(icon: const Icon(Icons.chat, color: Color(0xFF128C7E)), tooltip: 'Confirmar por WhatsApp', onPressed: _confirmarPorWhatsApp),
             ),

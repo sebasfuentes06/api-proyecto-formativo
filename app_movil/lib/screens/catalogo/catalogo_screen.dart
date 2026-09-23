@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
@@ -100,12 +101,15 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Catálogo'), actions: const [BotonPerfil()]),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_catalogo',
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductoFormScreen())),
-        icon: const Icon(Icons.add),
-        label: const Text('Producto'),
-      ),
+      // Crear productos es del Administrador.
+      floatingActionButton: !Sesion.i.esAdmin
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'fab_catalogo',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductoFormScreen())),
+              icon: const Icon(Icons.add),
+              label: const Text('Producto'),
+            ),
       body: Column(children: [
         CampoBusqueda(pista: 'Buscar fragancia o SKU', onBuscar: (v) => _cambiarFiltro(() => _buscar = v)),
         SizedBox(
@@ -114,7 +118,11 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             children: [
-              for (final f in const {'active': 'Disponibles', 'bajo': 'Stock bajo', 'inactive': 'Inactivos'}.entries)
+              for (final f in {
+                'active': 'Disponibles',
+                if (Sesion.i.esEquipo) 'bajo': 'Stock bajo',
+                if (Sesion.i.esAdmin) 'inactive': 'Inactivos',
+              }.entries)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: ChoiceChip(label: Text(f.value), selected: _filtro == f.key, onSelected: (_) => _cambiarFiltro(() => _filtro = f.key)),
@@ -148,7 +156,7 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
     return GridView.builder(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
+      padding: EdgeInsets.fromLTRB(12, 4, 12, Sesion.i.esAdmin ? 96 : 16),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 220,
         mainAxisSpacing: 10,

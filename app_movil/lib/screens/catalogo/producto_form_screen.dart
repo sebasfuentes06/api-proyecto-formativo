@@ -113,7 +113,7 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
           ),
           espacio,
           DropdownButtonFormField<int>(
-            value: _categoria,
+            initialValue: _categoria,
             decoration: const InputDecoration(labelText: 'Categoría *'),
             items: [for (final c in _categorias!) DropdownMenuItem(value: c.id, child: Text(c.nombre))],
             onChanged: (v) => setState(() => _categoria = v),
@@ -121,7 +121,7 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
           ),
           espacio,
           DropdownButtonFormField<int>(
-            value: _proveedor,
+            initialValue: _proveedor,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Proveedor / marca *'),
             items: [for (final p in _proveedores!) DropdownMenuItem(value: p.id, child: Text(p.nombre, overflow: TextOverflow.ellipsis))],

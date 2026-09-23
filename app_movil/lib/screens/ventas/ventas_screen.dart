@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
@@ -39,6 +40,7 @@ class _VentasScreenState extends State<VentasScreen> {
   }
 
   Future<void> _cargarResumen() async {
+    if (!Sesion.i.esEquipo) return; // el cliente no ve los números del negocio
     try {
       final r = await Api.i.get('/api/dashboard/resumen');
       if (mounted) setState(() => _resumen = r['datos']);
@@ -76,18 +78,20 @@ class _VentasScreenState extends State<VentasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ventas'),
+        title: Text(Sesion.i.esCliente ? 'Mis compras' : 'Ventas'),
         actions: [
           IconButton(tooltip: 'Filtrar por fechas', icon: const Icon(Icons.date_range), onPressed: _elegirRango),
           const BotonPerfil(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_ventas',
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VentaFormScreen())),
-        icon: const Icon(Icons.add_shopping_cart),
-        label: const Text('Nueva venta'),
-      ),
+      floatingActionButton: !Sesion.i.esEquipo
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'fab_ventas',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VentaFormScreen())),
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text('Nueva venta'),
+            ),
       body: Column(children: [
         CampoBusqueda(pista: 'Factura o cliente', onBuscar: (v) => setState(() => _buscar = v)),
         FiltroChips<String>(
@@ -107,7 +111,10 @@ class _VentasScreenState extends State<VentasScreen> {
             encabezado: _encabezado(),
             cargar: (p) => Api.i.pagina('/api/ventas', Venta.desdeJson, query: {..._query, 'page': p, 'limit': 20}),
             alCargar: (p) => setState(() => _totales = p.resumen),
-            vacio: const EstadoVacio(icono: Icons.receipt_long_outlined, titulo: 'No hay ventas en este filtro'),
+            vacio: EstadoVacio(
+              icono: Icons.receipt_long_outlined,
+              titulo: Sesion.i.esCliente ? 'Aún no tienes compras aquí' : 'No hay ventas en este filtro',
+            ),
             itemBuilder: (ctx, v) => ListTile(
               title: Row(children: [
                 Expanded(child: Text(v.cliente, overflow: TextOverflow.ellipsis)),
@@ -162,7 +169,8 @@ class _VentasScreenState extends State<VentasScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(children: [
             Row(children: [
-              tarjeta('Hoy', dinero(aNum(r['ventas_hoy'])), Icons.today, pie: '${r['cantidad_hoy']} venta(s)'),
+              tarjeta(r['alcance'] == 'mis_ventas' ? 'Mis ventas hoy' : 'Hoy', dinero(aNum(r['ventas_hoy'])), Icons.today,
+                  pie: '${r['cantidad_hoy']} venta(s)'),
               tarjeta('Este mes', dinero(aNum(r['ventas_mes'])), Icons.calendar_month, pie: '${r['cantidad_mes']} venta(s)'),
             ]),
             Row(children: [

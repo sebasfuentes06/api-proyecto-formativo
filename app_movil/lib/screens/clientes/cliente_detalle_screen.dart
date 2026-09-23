@@ -4,12 +4,14 @@ import '../../core/api.dart';
 import '../../core/contacto.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
 import '../pedidos/pedido_form_screen.dart';
 import '../ventas/venta_detalle_screen.dart';
 import '../ventas/venta_form_screen.dart';
+import '../usuarios/usuario_form_screen.dart';
 import 'cliente_form_screen.dart';
 
 /// Ficha del cliente: datos, historial de compras y estado de cuenta.
@@ -117,9 +119,15 @@ class _ClienteDetalleScreenState extends State<ClienteDetalleScreen> {
               onSelected: (v) {
                 if (v == 'estado') _cambiarEstado();
                 if (v == 'pdf') compartirEstadoCuentaPdf(c, _cuenta!);
+                if (v == 'acceso') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => UsuarioFormScreen(clienteInicial: c)));
+                }
               },
               itemBuilder: (_) => [
-                PopupMenuItem(value: 'estado', child: Text(c.estado ? 'Desactivar cliente' : 'Activar cliente')),
+                // Activar/desactivar clientes y darles acceso es del Administrador.
+                if (Sesion.i.esAdmin)
+                  PopupMenuItem(value: 'estado', child: Text(c.estado ? 'Desactivar cliente' : 'Activar cliente')),
+                if (Sesion.i.esAdmin) const PopupMenuItem(value: 'acceso', child: Text('Dar acceso a la app')),
                 const PopupMenuItem(value: 'pdf', child: Text('Estado de cuenta en PDF')),
               ],
             ),

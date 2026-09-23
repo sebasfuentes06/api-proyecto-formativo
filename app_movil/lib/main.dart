@@ -46,7 +46,11 @@ class EssenceApp extends StatelessWidget {
       // sesión, Sesion avisa y esto se vuelve a construir.
       home: ListenableBuilder(
         listenable: Sesion.i,
-        builder: (_, __) => Sesion.i.activa ? const HomeShell() : const LoginScreen(),
+        builder: (_, __) => Sesion.i.activa
+            // La key cambia con el usuario: si alguien cierra sesión y entra
+            // otra persona con otro rol, las pestañas se arman desde cero.
+            ? HomeShell(key: ValueKey(Sesion.i.usuario?.id))
+            : const LoginScreen(),
       ),
     );
   }

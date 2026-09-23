@@ -4,6 +4,7 @@ import '../../core/api.dart';
 import '../../core/contacto.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
@@ -124,13 +125,27 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
               const PopupMenuItem(value: 'imprimir', child: ListTile(leading: Icon(Icons.print), title: Text('Imprimir / guardar PDF'))),
               if (v.debe)
                 const PopupMenuItem(value: 'verificar', child: ListTile(leading: Icon(Icons.verified_outlined), title: Text('Verificar pago Wompi'))),
-              if (!v.anulada)
+              // Anular es solo del Administrador.
+              if (!v.anulada && Sesion.i.esAdmin)
                 const PopupMenuItem(value: 'anular', child: ListTile(leading: Icon(Icons.block, color: rojo), title: Text('Anular venta'))),
             ],
           ),
         ],
       ),
-      bottomNavigationBar: v.debe
+      bottomNavigationBar: v.debe && Sesion.i.esCliente
+          // El cliente paga su saldo en línea con Wompi.
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: FilledButton.icon(
+                  onPressed: () => pagarConWompi(context, v),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                  icon: const Icon(Icons.credit_card),
+                  label: Text('Pagar ${dinero(v.saldo)} en línea'),
+                ),
+              ),
+            )
+          : v.debe
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -190,14 +205,16 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
               leading: const CircleAvatar(child: Icon(Icons.person)),
               title: Text(v.cliente),
               subtitle: Text(v.clienteTelefono ?? ''),
-              trailing: v.clienteTelefono == null
-                  ? const Icon(Icons.chevron_right)
+              trailing: v.clienteTelefono == null || Sesion.i.esCliente
+                  ? null
                   : IconButton(
                       icon: const Icon(Icons.chat, color: Color(0xFF128C7E)),
                       onPressed: () => abrirWhatsApp(v.clienteTelefono,
                           'Hola ${v.cliente.split(' ').first}, te escribimos de Essence Don Aire por tu compra ${v.numeroFactura}.'),
                     ),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ClienteDetalleScreen(idCliente: v.idCliente))),
+              onTap: Sesion.i.esCliente
+                  ? null
+                  : () => Navigator.push(context, MaterialPageRoute(builder: (_) => ClienteDetalleScreen(idCliente: v.idCliente))),
             ),
           ),
           const TituloSeccion('Productos'),
@@ -241,7 +258,7 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
               isThreeLine: p.referencia != null || p.nota != null,
               trailing: p.anulado
                   ? const Etiqueta('Anulado', color: gris)
-                  : v.anulada
+                  : v.anulada || !Sesion.i.esAdmin
                       ? null
                       : IconButton(tooltip: 'Anular pago', icon: const Icon(Icons.undo), onPressed: () => _anularPago(p)),
             ),
@@ -253,7 +270,11 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
                 title: Text(dinero(l.monto)),
                 subtitle: Text('Creado ${fechaHora(l.creadoEn)}'),
                 trailing: Etiqueta(capitalizar(l.estado), color: l.estado == 'pagado' ? verde : l.estado == 'activo' ? azul : gris),
-                onTap: l.estado == 'activo' ? () => mostrarLinkWompi(context, v, l) : null,
+                onTap: l.estado != 'activo'
+                    ? null
+                    : Sesion.i.esCliente
+                        ? () => abrirUrl(l.url)
+                        : () => mostrarLinkWompi(context, v, l),
               ),
           ],
           if ((v.notas ?? '').isNotEmpty) ...[

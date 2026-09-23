@@ -1,5 +1,6 @@
 import { query } from "../db/pool.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
+import { esCliente } from "../middlewares/auth.js";
 
 /**
  * Historial de compras y estado de cuenta de un cliente.
@@ -7,7 +8,9 @@ import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
  * pedir datos y saber qué ha comprado y cuánto debe.
  */
 
-async function clienteOError(id) {
+async function clienteOError(id, req) {
+  // Un Cliente solo puede consultar su propia cuenta.
+  if (esCliente(req) && id !== req.usuario.idCliente) throw new ErrorHttp(404, "No existe un cliente con ese id.");
   const { rows } = await query("SELECT * FROM clientes WHERE id_cliente = $1", [id]);
   if (!rows[0]) throw new ErrorHttp(404, "No existe un cliente con ese id.");
   return rows[0];
@@ -15,7 +18,7 @@ async function clienteOError(id) {
 
 /** GET /api/clientes/:id/historial — compras con sus productos. */
 const historial = asyncHandler(async (req, res) => {
-  const cliente = await clienteOError(req.idNumerico);
+  const cliente = await clienteOError(req.idNumerico, req);
   const { rows: ventas } = await query(
     `SELECT v.id_venta, v.numero_factura, v.fecha, v.canal, v.estado, v.total, s.pagado, s.saldo, s.estado_pago,
             COALESCE(json_agg(json_build_object('nombre', p.nombre, 'cantidad', d.cantidad) ORDER BY d.id_detalle)
@@ -54,7 +57,7 @@ const historial = asyncHandler(async (req, res) => {
 
 /** GET /api/clientes/:id/estado-cuenta — lo que debe y lo que ha pagado. */
 const estadoCuenta = asyncHandler(async (req, res) => {
-  const cliente = await clienteOError(req.idNumerico);
+  const cliente = await clienteOError(req.idNumerico, req);
   const { rows: ventas } = await query(
     `SELECT v.id_venta, v.numero_factura, v.fecha, v.total, s.pagado, s.saldo, s.estado_pago,
             (hoy_local() - fecha_local(v.fecha)::DATE)::INT AS dias

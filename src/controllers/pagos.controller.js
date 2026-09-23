@@ -3,6 +3,7 @@ import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { paginacion, respuestaListado } from "../utils/consulta.js";
 import { validarPago, insertarPago, saldoVenta } from "../services/ventas.service.js";
 import * as wompi from "../services/wompi.service.js";
+import { esCliente } from "../middlewares/auth.js";
 
 /**
  * Controlador de Pagos y Abonos.
@@ -21,7 +22,8 @@ const listar = asyncHandler(async (req, res) => {
     valores.push(valor);
     condiciones.push(sql.replaceAll("?", `$${valores.length}`));
   };
-  const f = req.query;
+  // El Cliente solo ve sus pagos.
+  const f = esCliente(req) ? { ...req.query, id_cliente: req.usuario.idCliente } : req.query;
   if (f.id_venta) agregar("p.id_venta = ?", Number(f.id_venta));
   if (f.id_cliente) agregar("v.id_cliente = ?", Number(f.id_cliente));
   if (f.metodo) agregar("p.metodo = ?", f.metodo);
@@ -140,6 +142,10 @@ const wompiCrearLink = asyncHandler(async (req, res) => {
   if (!Number.isInteger(idVenta) || idVenta < 1) throw new ErrorHttp(400, "Indica la venta.", { id_venta: "Obligatorio." });
 
   const venta = await transaccion((db) => saldoVenta(db, idVenta, { bloquear: false }));
+  if (esCliente(req)) {
+    const { rows: dueno } = await query("SELECT id_cliente FROM ventas WHERE id_venta = $1", [idVenta]);
+    if (dueno[0]?.id_cliente !== req.usuario.idCliente) throw new ErrorHttp(404, "No existe esa venta.");
+  }
   if (venta.estado === "anulada") throw new ErrorHttp(409, "La venta está anulada.");
   if (venta.saldo <= 0) throw new ErrorHttp(409, `La venta ${venta.numero_factura} ya está pagada.`);
 

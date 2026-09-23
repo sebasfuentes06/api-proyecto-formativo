@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
@@ -25,8 +26,9 @@ class _PedidosScreenState extends State<PedidosScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pedidos'),
+        title: Text(Sesion.i.esCliente ? 'Mis pedidos' : 'Pedidos'),
         actions: [
+          if (Sesion.i.esEquipo)
           PopupMenuButton<String>(
             tooltip: 'Canal',
             icon: Icon(_canal.isEmpty ? Icons.filter_list : Icons.filter_list_alt),
@@ -62,12 +64,17 @@ class _PedidosScreenState extends State<PedidosScreen> {
             vacio: EstadoVacio(
               icono: Icons.assignment_outlined,
               titulo: _estado == 'pendiente' ? 'No hay pedidos pendientes' : 'No hay pedidos aquí',
-              subtitulo: 'Registra los pedidos que llegan por WhatsApp para no perder ninguno.',
+              subtitulo: Sesion.i.esCliente
+                  ? 'Haz tu pedido desde el catálogo o con el botón de abajo.'
+                  : 'Registra los pedidos que llegan por WhatsApp para no perder ninguno.',
             ),
             itemBuilder: (ctx, p) => ListTile(
               leading: CircleAvatar(
                 backgroundColor: p.canal == 'whatsapp' ? const Color(0xFFDCF8C6) : Theme.of(ctx).colorScheme.secondaryContainer,
-                child: Icon(p.canal == 'whatsapp' ? Icons.chat : Icons.storefront, color: p.canal == 'whatsapp' ? const Color(0xFF128C7E) : null),
+                child: Icon(
+                  p.canal == 'whatsapp' ? Icons.chat : p.canal == 'app' ? Icons.phone_iphone : Icons.storefront,
+                  color: p.canal == 'whatsapp' ? const Color(0xFF128C7E) : null,
+                ),
               ),
               title: Row(children: [
                 Expanded(child: Text(p.cliente, overflow: TextOverflow.ellipsis)),

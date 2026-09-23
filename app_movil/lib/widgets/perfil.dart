@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/config.dart';
 import '../core/sesion.dart';
+import '../screens/usuarios/usuarios_screen.dart';
 import 'comunes.dart';
 
 /// Botón del avatar (arriba a la derecha en todas las pestañas): perfil,
@@ -44,6 +45,16 @@ class BotonPerfil extends StatelessWidget {
               isThreeLine: true,
             ),
             const Divider(),
+            if (Sesion.i.esAdmin)
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('Usuarios y roles'),
+                subtitle: const Text('Administradores, vendedores y clientes con acceso'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const UsuariosScreen()));
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.password),
               title: const Text('Cambiar contraseña'),
@@ -52,6 +63,7 @@ class BotonPerfil extends StatelessWidget {
                 _cambiarClave(context);
               },
             ),
+            if (Sesion.i.esEquipo)
             ListTile(
               leading: const Icon(Icons.credit_card),
               title: const Text('Estado de Wompi'),

@@ -260,3 +260,40 @@ CREATE INDEX IF NOT EXISTS idx_ventas_fecha    ON ventas (fecha);
 CREATE INDEX IF NOT EXISTS idx_pagos_venta     ON pagos (id_venta);
 CREATE INDEX IF NOT EXISTS idx_detven_producto ON detalle_venta (id_producto);
 CREATE INDEX IF NOT EXISTS idx_wompi_venta     ON wompi_links (id_venta);
+
+-- ============================================================
+-- 9. ROLES (Administrador, Vendedor, Cliente)
+-- Los mismos tres perfiles del proyecto principal. Un usuario con rol
+-- Cliente queda enlazado a su ficha en `clientes` (id_cliente): así ve
+-- solo sus pedidos, sus compras y su estado de cuenta.
+-- ============================================================
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS id_cliente INT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_usuarios_cliente') THEN
+    ALTER TABLE usuarios ADD CONSTRAINT fk_usuarios_cliente
+      FOREIGN KEY (id_cliente) REFERENCES clientes (id_cliente);
+  END IF;
+  -- Una ficha de cliente tiene como máximo un usuario.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_usuarios_cliente') THEN
+    ALTER TABLE usuarios ADD CONSTRAINT uq_usuarios_cliente UNIQUE (id_cliente);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_usuarios_rol') THEN
+    ALTER TABLE usuarios ADD CONSTRAINT chk_usuarios_rol
+      CHECK (rol IN ('Administrador', 'Vendedor', 'Cliente'));
+  END IF;
+  -- El rol Cliente siempre apunta a una ficha; los demás, nunca.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_usuarios_rol_cliente') THEN
+    ALTER TABLE usuarios ADD CONSTRAINT chk_usuarios_rol_cliente
+      CHECK ((rol = 'Cliente') = (id_cliente IS NOT NULL));
+  END IF;
+END $$;
+
+-- Canal "app": pedidos que el cliente hace él mismo desde la app.
+ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS chk_pedidos_canal;
+ALTER TABLE pedidos ADD CONSTRAINT chk_pedidos_canal CHECK (canal IN ('whatsapp', 'punto_fisico', 'app'));
+ALTER TABLE ventas  DROP CONSTRAINT IF EXISTS chk_ventas_canal;
+ALTER TABLE ventas  ADD CONSTRAINT chk_ventas_canal  CHECK (canal IN ('whatsapp', 'punto_fisico', 'app'));
+
+CREATE INDEX IF NOT EXISTS idx_ventas_usuario ON ventas (id_usuario);

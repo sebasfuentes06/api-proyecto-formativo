@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../core/sesion.dart';
 import 'catalogo/catalogo_screen.dart';
 import 'clientes/clientes_screen.dart';
+import 'cuenta/mi_cuenta_screen.dart';
 import 'pagos/pagos_screen.dart';
 import 'pedidos/pedidos_screen.dart';
 import 'ventas/ventas_screen.dart';
 
-/// Estructura principal: los cinco subprocesos de la ficha como pestañas en
-/// la parte de abajo.
+/// Estructura principal: pestañas en la parte de abajo, según el rol.
 ///
-/// IndexedStack mantiene vivas las cinco pantallas: al cambiar de pestaña no
-/// se pierde la búsqueda ni la posición de la lista.
+///   Administrador y Vendedor: Clientes · Catálogo · Pedidos · Ventas · Pagos
+///   Cliente:                  Catálogo · Mis pedidos · Mis compras · Mi cuenta
+///
+/// Dentro de cada pantalla se ocultan las acciones que el rol no puede hacer
+/// (por ejemplo, el Vendedor no ve "Anular venta"). La API valida lo mismo,
+/// así que ocultar un botón es comodidad, no la única protección.
+///
+/// IndexedStack mantiene vivas las pantallas: al cambiar de pestaña no se
+/// pierde la búsqueda ni la posición de la lista.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -18,32 +26,45 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
-  // Arranca en Ventas: ahí está el resumen del día.
-  int _indice = 3;
+class _Pestana {
+  const _Pestana(this.pantalla, this.icono, this.iconoActivo, this.etiqueta);
+  final Widget pantalla;
+  final IconData icono, iconoActivo;
+  final String etiqueta;
+}
 
-  static const _pantallas = [
-    ClientesScreen(),
-    CatalogoScreen(),
-    PedidosScreen(),
-    VentasScreen(),
-    PagosScreen(),
-  ];
+const _equipo = [
+  _Pestana(ClientesScreen(), Icons.people_outline, Icons.people, 'Clientes'),
+  _Pestana(CatalogoScreen(), Icons.local_florist_outlined, Icons.local_florist, 'Catálogo'),
+  _Pestana(PedidosScreen(), Icons.assignment_outlined, Icons.assignment, 'Pedidos'),
+  _Pestana(VentasScreen(), Icons.point_of_sale_outlined, Icons.point_of_sale, 'Ventas'),
+  _Pestana(PagosScreen(), Icons.payments_outlined, Icons.payments, 'Pagos'),
+];
+
+const _cliente = [
+  _Pestana(CatalogoScreen(), Icons.local_florist_outlined, Icons.local_florist, 'Catálogo'),
+  _Pestana(PedidosScreen(), Icons.assignment_outlined, Icons.assignment, 'Mis pedidos'),
+  _Pestana(VentasScreen(), Icons.receipt_long_outlined, Icons.receipt_long, 'Mis compras'),
+  _Pestana(MiCuentaScreen(), Icons.account_balance_wallet_outlined, Icons.account_balance_wallet, 'Mi cuenta'),
+];
+
+class _HomeShellState extends State<HomeShell> {
+  // El equipo arranca en Ventas (ahí está el resumen del día); el cliente,
+  // en el catálogo.
+  late int _indice = Sesion.i.esCliente ? 0 : 3;
 
   @override
   Widget build(BuildContext context) {
+    final pestanas = Sesion.i.esCliente ? _cliente : _equipo;
     return Scaffold(
-      body: IndexedStack(index: _indice, children: _pantallas),
+      body: IndexedStack(index: _indice, children: [for (final p in pestanas) p.pantalla]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _indice,
         onDestinationSelected: (i) => setState(() => _indice = i),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Clientes'),
-          NavigationDestination(icon: Icon(Icons.local_florist_outlined), selectedIcon: Icon(Icons.local_florist), label: 'Catálogo'),
-          NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'Pedidos'),
-          NavigationDestination(icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale), label: 'Ventas'),
-          NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: 'Pagos'),
+        destinations: [
+          for (final p in pestanas)
+            NavigationDestination(icon: Icon(p.icono), selectedIcon: Icon(p.iconoActivo), label: p.etiqueta),
         ],
       ),
     );

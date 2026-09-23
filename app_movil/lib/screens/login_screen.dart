@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text('Essence Don Aire', textAlign: TextAlign.center, style: tema.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-                    Text('Administración de ventas', textAlign: TextAlign.center, style: tema.textTheme.bodyMedium?.copyWith(color: tema.colorScheme.outline)),
+                    Text('Ventas, pedidos y pagos', textAlign: TextAlign.center, style: tema.textTheme.bodyMedium?.copyWith(color: tema.colorScheme.outline)),
                     const SizedBox(height: 32),
                     TextFormField(
                       controller: _correo,
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Uso exclusivo del administrador\n${Config.apiUrl.replaceFirst('https://', '')}',
+                      'Administrador · Vendedor · Cliente\n${Config.apiUrl.replaceFirst('https://', '')}',
                       textAlign: TextAlign.center,
                       style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.outline),
                     ),

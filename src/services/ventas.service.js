@@ -9,7 +9,7 @@ import { ErrorHttp } from "../middlewares/errores.js";
  */
 
 const METODOS_PAGO = ["efectivo", "transferencia", "nequi", "daviplata", "tarjeta"];
-const CANALES = ["whatsapp", "punto_fisico"];
+const CANALES = ["whatsapp", "punto_fisico", "app"];
 
 const redondear = (n) => Math.round(Number(n) * 100) / 100;
 

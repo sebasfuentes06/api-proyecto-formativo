@@ -418,8 +418,14 @@ Además del CRUD, la API sirve a la **app Flutter del administrador**
 | `/api/clientes/:id/historial` y `/estado-cuenta` | Historial de compras y saldo del cliente |
 | `/api/productos/:id/imagen` | Foto del producto (se guarda en PostgreSQL) |
 | `/api/dashboard/resumen` | Ventas del día y del mes, cartera, pedidos pendientes, stock bajo |
+| `/api/usuarios` | Usuarios y roles (Administrador, Vendedor, Cliente); solo Administrador |
+
+**Roles.** Administrador: todo. Vendedor: clientes, pedidos, ventas y abonos, sin
+anular ni editar catálogo o usuarios. Cliente: solo su catálogo, sus pedidos, sus
+compras y su saldo (paga en línea con Wompi). Las rutas del CRUD base siguen
+abiertas sin token para el panel web; con token se aplican los roles.
 
 Las tablas nuevas están en `database/movil.sql` (se aplica con
 `npm run db:movil` sobre una base existente). Pruebas: `npm run test:movil`
-(75 comprobaciones del proceso completo; con `WOMPI_SIMULADO=1` también simula
-Wompi). El paso a paso del despliegue está en `DESPLIEGUE.md`, parte 6.
+(112 comprobaciones del proceso completo y de los roles; con `WOMPI_SIMULADO=1`
+también simula Wompi). El paso a paso del despliegue está en `DESPLIEGUE.md`, parte 6.

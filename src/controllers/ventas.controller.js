@@ -3,19 +3,24 @@ import { transaccion } from "../db/pool.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { respuestaListado } from "../utils/consulta.js";
 import { registrarVenta } from "../services/ventas.service.js";
+import { esCliente } from "../middlewares/auth.js";
 
 /** Controlador de Ventas. */
 
 /** GET /api/ventas */
 const listar = asyncHandler(async (req, res) => {
-  const { filas, total, resumen, pagina, porPagina } = await modelo.listar(req.query);
+  // El Cliente solo ve sus compras.
+  const filtros = esCliente(req) ? { ...req.query, id_cliente: req.usuario.idCliente } : req.query;
+  const { filas, total, resumen, pagina, porPagina } = await modelo.listar(filtros);
   res.json({ ...respuestaListado(filas, total, { pagina, porPagina }), resumen });
 });
 
 /** GET /api/ventas/:id */
 const obtener = asyncHandler(async (req, res) => {
   const venta = await modelo.obtenerPorId(req.idNumerico);
-  if (!venta) throw new ErrorHttp(404, "No existe una venta con ese id.");
+  if (!venta || (esCliente(req) && venta.id_cliente !== req.usuario.idCliente)) {
+    throw new ErrorHttp(404, "No existe una venta con ese id.");
+  }
   res.json({ ok: true, datos: venta });
 });
 

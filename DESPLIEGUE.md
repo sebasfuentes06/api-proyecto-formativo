@@ -192,6 +192,11 @@ https://api-proyecto-formativo.vercel.app/api/webhooks/wompi
 Sin esto la app funciona igual, pero los pagos con link hay que confirmarlos a
 mano con *Verificar pago Wompi*.
 
+**Roles (Administrador, Vendedor, Cliente).** Si ya habías migrado antes de
+que existieran los roles, vuelve a correr `npm run db:movil` **antes** del
+`git push`: agrega la columna `usuarios.id_cliente` y las reglas de rol. No
+borra nada.
+
 **Comprobar:**
 
 ```bash

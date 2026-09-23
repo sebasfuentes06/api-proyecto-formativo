@@ -357,3 +357,35 @@ class LineaCarrito {
         'precio_unitario': precio,
       };
 }
+
+/// Cuenta de acceso a la app (gestión de usuarios del Administrador).
+class UsuarioApp {
+  UsuarioApp({
+    required this.id,
+    required this.nombre,
+    required this.correo,
+    required this.rol,
+    required this.estado,
+    this.idCliente,
+    this.cliente,
+    this.ultimoAcceso,
+  });
+
+  final int id;
+  final String nombre, correo, rol;
+  final bool estado;
+  final int? idCliente;
+  final String? cliente;
+  final DateTime? ultimoAcceso;
+
+  factory UsuarioApp.desdeJson(Json j) => UsuarioApp(
+        id: aInt(j['id_usuario']),
+        nombre: j['nombre'] ?? '',
+        correo: j['correo'] ?? '',
+        rol: j['rol'] ?? '',
+        estado: j['estado'] ?? true,
+        idCliente: j['id_cliente'] == null ? null : aInt(j['id_cliente']),
+        cliente: j['cliente'],
+        ultimoAcceso: aFecha(j['ultimo_acceso']),
+      );
+}

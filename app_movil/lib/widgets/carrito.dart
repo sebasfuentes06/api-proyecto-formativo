@@ -199,7 +199,7 @@ class _CamposPagoState extends State<CamposPago> {
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
-        value: widget.datos.metodo,
+        initialValue: widget.datos.metodo,
         decoration: const InputDecoration(labelText: 'Método de pago'),
         items: [
           for (final m in ['efectivo', 'transferencia', 'nequi', 'daviplata', 'tarjeta'])

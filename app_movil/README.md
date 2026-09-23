@@ -1,7 +1,7 @@
 # Essence Don Aire — App móvil (Flutter)
 
-App del **administrador** para gestionar el proceso de ventas desde el celular
-(ficha del proyecto, *Proceso Móvil*). Se conecta a la API desplegada en Vercel,
+App para gestionar el proceso de ventas desde el celular (ficha del proyecto,
+*Proceso Móvil*), con los **mismos tres roles del proyecto principal**. Se conecta a la API desplegada en Vercel,
 que a su vez usa la base PostgreSQL de Neon.
 
 | Pestaña | Subproceso de la ficha | Qué se puede hacer |
@@ -11,6 +11,23 @@ que a su vez usa la base PostgreSQL de Neon.
 | **Pedidos** | Subproceso de pedidos | Registrar pedidos de WhatsApp o del local (sin mover stock), editarlos, cancelarlos, confirmarlos por WhatsApp y **convertirlos en venta** |
 | **Ventas** | Subproceso de ventas | Resumen del día y del mes; nueva venta (contado o crédito, descuento, precio especial); historial con filtros y rango de fechas; **factura PDF** (compartir o imprimir); anular venta |
 | **Pagos** | Subproceso de pagos y abonos | Pagos totales o abonos (efectivo, transferencia, Nequi, Daviplata, tarjeta); **link de pago Wompi**; cartera por cliente; **reporte PDF de pagos pendientes**; recordatorio por WhatsApp; anular pagos |
+
+## Roles
+
+| | Administrador | Vendedor | Cliente |
+|---|---|---|---|
+| Pestañas | Clientes · Catálogo · Pedidos · Ventas · Pagos | las mismas | Catálogo · Mis pedidos · Mis compras · Mi cuenta |
+| Clientes | todo, incluido activar/desactivar y darles acceso | ver, crear, editar | — |
+| Catálogo | crear, editar, fotos, stock | ver | ver y pedir |
+| Pedidos | todo | crear, editar, convertir en venta | los suyos: crear, editar, cancelar |
+| Ventas | todo, incluido anular | registrar, ver | ver sus compras y su factura |
+| Pagos | todo, incluido anular pagos | registrar abonos, links Wompi | pagar su saldo en línea con Wompi |
+| Resumen | del negocio | de sus ventas | — |
+| Usuarios | crear, editar rol, desactivar, restablecer clave | — | — |
+
+Los usuarios se gestionan en **avatar ▸ Usuarios y roles**. Para darle acceso a
+un cliente: ficha del cliente ▸ ⋮ ▸ *Dar acceso a la app*. La API valida cada
+permiso: ocultar un botón en la app es comodidad, no la única protección.
 
 ## Primera vez
 

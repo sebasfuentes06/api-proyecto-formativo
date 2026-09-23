@@ -8,6 +8,7 @@ import '../../core/api.dart';
 import '../../core/contacto.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../pedidos/pedido_form_screen.dart';
@@ -161,24 +162,42 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
+    final admin = Sesion.i.esAdmin;
     return Scaffold(
       appBar: AppBar(
         title: Text(_p.nombre),
         actions: [
           IconButton(tooltip: 'Compartir por WhatsApp', icon: const Icon(Icons.share), onPressed: _compartir),
-          IconButton(
-            tooltip: 'Editar',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductoFormScreen(producto: _p))),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (v) => v == 'estado' ? _cambiarEstado() : null,
-            itemBuilder: (_) => [PopupMenuItem(value: 'estado', child: Text(_p.estado ? 'Desactivar' : 'Activar'))],
-          ),
+          // Editar el catálogo es del Administrador.
+          if (admin)
+            IconButton(
+              tooltip: 'Editar',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductoFormScreen(producto: _p))),
+            ),
+          if (admin)
+            PopupMenuButton<String>(
+              onSelected: (v) => v == 'estado' ? _cambiarEstado() : null,
+              itemBuilder: (_) => [PopupMenuItem(value: 'estado', child: Text(_p.estado ? 'Desactivar' : 'Activar'))],
+            ),
         ],
       ),
-      bottomNavigationBar: _p.vendible
-          ? SafeArea(
+      bottomNavigationBar: !_p.vendible
+          ? null
+          : Sesion.i.esCliente
+              // El cliente no vende: pide.
+              ? SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoFormScreen(productoInicial: _p))),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                      icon: const Icon(Icons.shopping_bag_outlined),
+                      label: const Text('Pedir este producto'),
+                    ),
+                  ),
+                )
+              : SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: Row(children: [
@@ -199,14 +218,14 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
                   ),
                 ]),
               ),
-            )
-          : null,
+            ),
       body: RefreshIndicator(
         onRefresh: _recargar,
         child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
           Stack(children: [
             AspectRatio(aspectRatio: 1.3, child: ProductoImagen(_p, tam: null, radio: 0)),
-            Positioned(
+            if (admin)
+              Positioned(
               right: 12,
               bottom: 12,
               child: FilledButton.tonalIcon(
@@ -233,13 +252,14 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
               ],
             ]),
           ),
+          if (Sesion.i.esEquipo)
           Card(
             child: Column(children: [
               ListTile(
                 leading: const Icon(Icons.inventory_2_outlined),
                 title: Text('${_p.stock} unidades en stock'),
                 subtitle: Text('Mínimo: ${_p.stockMinimo}${_p.stockBajo ? ' · ¡Hay que reponer!' : ''}'),
-                trailing: FilledButton.tonal(onPressed: _ingresarStock, child: const Text('+ Ingreso')),
+                trailing: admin ? FilledButton.tonal(onPressed: _ingresarStock, child: const Text('+ Ingreso')) : null,
               ),
               const Divider(height: 1),
               ListTile(leading: const Icon(Icons.local_shipping_outlined), title: Text(_p.proveedor), subtitle: const Text('Proveedor')),

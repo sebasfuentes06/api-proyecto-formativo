@@ -220,9 +220,11 @@ Etiqueta etiquetaEstadoPedido(String estado) => switch (estado) {
       _ => const Etiqueta('Pendiente', color: ambar, icono: Icons.schedule),
     };
 
-Etiqueta etiquetaCanal(String canal) => canal == 'whatsapp'
-    ? const Etiqueta('WhatsApp', color: Color(0xFF128C7E), icono: Icons.chat)
-    : const Etiqueta('Punto físico', color: azul, icono: Icons.storefront);
+Etiqueta etiquetaCanal(String canal) => switch (canal) {
+      'whatsapp' => const Etiqueta('WhatsApp', color: Color(0xFF128C7E), icono: Icons.chat),
+      'app' => const Etiqueta('App', color: Color(0xFF6A1B9A), icono: Icons.phone_iphone),
+      _ => const Etiqueta('Punto físico', color: azul, icono: Icons.storefront),
+    };
 
 Widget etiquetaStock(Producto p) {
   if (!p.estado) return const Etiqueta('Inactivo', color: gris);

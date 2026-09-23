@@ -1,0 +1,131 @@
+import 'package:flutter/material.dart';
+
+import '../../core/api.dart';
+import '../../core/eventos.dart';
+import '../../core/formato.dart';
+import '../../core/sesion.dart';
+import '../../models/modelos.dart';
+import '../../widgets/comunes.dart';
+import '../../widgets/perfil.dart';
+import '../pagos/acciones_pago.dart';
+import '../ventas/venta_detalle_screen.dart';
+
+/// "Mi cuenta" del rol Cliente: cuánto debe, qué compras tienen saldo (con
+/// botón para pagarlas en línea con Wompi) y sus últimos pagos.
+class MiCuentaScreen extends StatefulWidget {
+  const MiCuentaScreen({super.key});
+
+  @override
+  State<MiCuentaScreen> createState() => _MiCuentaScreenState();
+}
+
+class _MiCuentaScreenState extends State<MiCuentaScreen> {
+  Map<String, dynamic>? _cuenta;
+  Object? _error;
+
+  int? get _idCliente => Sesion.i.usuario?.idCliente;
+
+  @override
+  void initState() {
+    super.initState();
+    Eventos.datos.addListener(_cargar);
+    _cargar();
+  }
+
+  @override
+  void dispose() {
+    Eventos.datos.removeListener(_cargar);
+    super.dispose();
+  }
+
+  Future<void> _cargar() async {
+    if (_idCliente == null) return;
+    try {
+      final r = await Api.i.get('/api/clientes/$_idCliente/estado-cuenta');
+      if (!mounted) return;
+      setState(() {
+        _cuenta = r['datos'];
+        _error = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  /// Para pagar hace falta la venta completa (saldo al día, cliente...).
+  Future<void> _pagar(int idVenta) async {
+    final r = await conCarga(context, Api.i.get('/api/ventas/$idVenta'), avisarCambio: false);
+    if (r == null || !mounted) return;
+    await pagarConWompi(context, Venta.desdeJson(r['datos']));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    final Widget cuerpo;
+    if (_idCliente == null) {
+      cuerpo = const EstadoVacio(icono: Icons.link_off, titulo: 'Tu usuario no está enlazado a una ficha de cliente');
+    } else if (_cuenta == null) {
+      cuerpo = _error != null ? ErrorReintentar(error: _error!, onReintentar: _cargar) : const Center(child: CircularProgressIndicator());
+    } else {
+      final res = _cuenta!['resumen'] as Map<String, dynamic>;
+      final saldo = aNum(res['saldo']);
+      final conSaldo = (_cuenta!['ventas'] as List).cast<Map<String, dynamic>>().where((v) => aNum(v['saldo']) > 0).toList();
+      final pagos = (_cuenta!['pagos'] as List).map((p) => Pago.desdeJson(p)).toList();
+
+      cuerpo = RefreshIndicator(
+        onRefresh: _cargar,
+        child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
+          Card(
+            color: saldo > 0 ? tema.colorScheme.errorContainer : tema.colorScheme.primaryContainer,
+            margin: const EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(children: [
+                Text(saldo > 0 ? 'Tu saldo pendiente' : '¡Estás al día!', style: tema.textTheme.titleSmall),
+                Text(dinero(saldo), style: tema.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                FilaValor('Total comprado', dinero(aNum(res['total_facturado']))),
+                FilaValor('Total pagado', dinero(aNum(res['total_pagado']))),
+              ]),
+            ),
+          ),
+          if (conSaldo.isNotEmpty) ...[
+            const TituloSeccion('Compras por pagar'),
+            for (final v in conSaldo)
+              Card(
+                child: ListTile(
+                  title: Text('${v['numero_factura']} · ${fecha(aFecha(v['fecha']))}'),
+                  subtitle: Text('Total ${dinero(aNum(v['total']))} · pagado ${dinero(aNum(v['pagado']))}'),
+                  trailing: FilledButton(onPressed: () => _pagar(aInt(v['id_venta'])), child: Text('Pagar ${dinero(aNum(v['saldo']))}')),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VentaDetalleScreen(idVenta: aInt(v['id_venta'])))),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                'El pago en línea se hace con Wompi (tarjeta, PSE, Nequi o Bancolombia). '
+                'Cuando termines, vuelve y desliza hacia abajo para ver tu saldo al día.',
+                style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.outline),
+              ),
+            ),
+          ],
+          const TituloSeccion('Mis pagos'),
+          if (pagos.isEmpty) const ListTile(title: Text('Aún no hay pagos registrados')),
+          for (final p in pagos)
+            ListTile(
+              leading: Icon(p.metodo == 'wompi' ? Icons.credit_card : Icons.payments_outlined, color: p.anulado ? gris : verde),
+              title: Text('${dinero(p.monto)} · ${nombresMetodo[p.metodo] ?? p.metodo}',
+                  style: TextStyle(decoration: p.anulado ? TextDecoration.lineThrough : null)),
+              subtitle: Text('${p.numeroFactura ?? ''} · ${fechaHora(p.fecha)}'),
+              trailing: p.anulado ? const Etiqueta('Anulado', color: gris) : null,
+            ),
+        ]),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mi cuenta'), actions: const [BotonPerfil()]),
+      body: cuerpo,
+    );
+  }
+}

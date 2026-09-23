@@ -43,4 +43,4 @@ const nombresMetodo = {
   'wompi': 'Wompi',
 };
 
-const nombresCanal = {'whatsapp': 'WhatsApp', 'punto_fisico': 'Punto físico'};
+const nombresCanal = {'whatsapp': 'WhatsApp', 'punto_fisico': 'Punto físico', 'app': 'App'};

@@ -178,3 +178,45 @@ Future<void> verificarPagoWompi(BuildContext context) async {
   final r = await conCarga(context, Api.i.post('/api/pagos/wompi/verificar', {'id_transaccion': id}));
   if (r != null && context.mounted) mostrarMensaje(context, r['mensaje'] ?? 'Verificado.');
 }
+
+/// Para el rol Cliente: crea el link por el monto que quiera abonar y abre
+/// el checkout de Wompi en el navegador. Cuando Wompi aprueba el pago, el
+/// webhook registra el abono y al volver a la app el saldo ya aparece
+/// actualizado.
+Future<void> pagarConWompi(BuildContext context, Venta venta) async {
+  final control = TextEditingController(text: venta.saldo.round().toString());
+  final monto = await showDialog<int>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Pagar en línea'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Compra ${venta.numeroFactura}. Puedes pagar todo el saldo o solo una parte (abono).'),
+        const SizedBox(height: 16),
+        TextField(
+          controller: control,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(labelText: '¿Cuánto vas a pagar?', prefixText: '\$ ', helperText: 'Saldo: ${dinero(venta.saldo)}'),
+        ),
+        const SizedBox(height: 8),
+        const Text('Tarjeta, PSE, Nequi o Bancolombia a través de Wompi.'),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, leerDinero(control.text)), child: const Text('Ir a pagar')),
+      ],
+    ),
+  );
+  if (monto == null || monto <= 0 || !context.mounted) return;
+  if (monto > venta.saldo.round()) {
+    mostrarMensaje(context, 'El monto no puede superar tu saldo (${dinero(venta.saldo)}).', error: true);
+    return;
+  }
+  final r = await conCarga(context, Api.i.post('/api/pagos/wompi/links', {'id_venta': venta.id, 'monto': monto}));
+  if (r == null || !context.mounted) return;
+  final link = WompiLink.desdeJson(r['datos']);
+  await abrirUrl(link.url);
+  if (context.mounted) {
+    mostrarMensaje(context, 'Cuando termines de pagar, vuelve y desliza hacia abajo para ver tu saldo actualizado.');
+  }
+}
