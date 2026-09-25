@@ -163,7 +163,7 @@ class _BuscadorImagenesScreenState extends State<BuscadorImagenesScreen> {
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => _buscar(),
             decoration: InputDecoration(
-              hintText: 'Ej. perfume, rosa, frasco de vidrio',
+              hintText: 'Ej. perfume bottle, rose perfume, cologne',
               prefixIcon: const Icon(Icons.image_search),
               suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _buscar),
             ),
@@ -171,7 +171,7 @@ class _BuscadorImagenesScreenState extends State<BuscadorImagenesScreen> {
         ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text('Fotos de Wikimedia Commons. Tip: busca en inglés para ver más resultados (perfume bottle, rose).',
+          child: Text('Fotos de Wikimedia Commons. Tip: busca en inglés para ver más resultados (perfume bottle, cologne bottle, rose perfume).',
               style: TextStyle(fontSize: 12)),
         ),
         if (_cargando) const LinearProgressIndicator(),

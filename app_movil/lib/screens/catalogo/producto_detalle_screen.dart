@@ -84,7 +84,7 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
     if (opcion == 'internet') {
       final img = await Navigator.push<ImagenElegida>(
         context,
-        MaterialPageRoute(builder: (_) => BuscadorImagenesScreen(busquedaInicial: _p.nombre)),
+        MaterialPageRoute(builder: (_) => BuscadorImagenesScreen(busquedaInicial: 'perfume bottle')),
       );
       if (img == null || !mounted) return;
       final r = await conCarga(context, Api.i.put('/api/productos/${_p.id}/imagen', {'base64': base64Encode(img.bytes), 'tipo_mime': img.mime}));
