@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -55,29 +56,46 @@ class Sesion extends ChangeNotifier {
   bool get esEquipo => esAdmin || esVendedor;
 
   /// Al abrir la app: si hay un token guardado, se valida contra la API.
+  ///
+  /// La app arranca con lo guardado en el teléfono (sin esperar a internet)
+  /// y valida el token con la API en segundo plano. Antes se esperaba la
+  /// respuesta: si la API tardaba, la app se quedaba en negro.
   Future<void> restaurar() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_clave);
-    if (token == null) return;
-    Api.i.token = token;
-    // Primero el usuario guardado: sin internet, la app igual sabe qué rol
-    // tiene y qué pestañas mostrar.
     final guardado = prefs.getString(_claveUsuario);
-    if (guardado != null) usuario = Usuario.desdeJson(jsonDecode(guardado));
+    if (token == null || guardado == null) return;
+    try {
+      usuario = Usuario.desdeJson(jsonDecode(guardado) as Map<String, dynamic>);
+      Api.i.token = token;
+    } catch (_) {
+      await _limpiar(prefs);
+      return;
+    }
+    unawaited(_verificar(prefs));
+  }
+
+  Future<void> _verificar(SharedPreferences prefs) async {
     try {
       final r = await Api.i.get('/api/auth/yo');
       usuario = Usuario.desdeJson(r['datos']);
       await prefs.setString(_claveUsuario, jsonEncode(usuario!.aJson()));
+      notifyListeners();
     } on ApiException catch (e) {
-      // 401: el token venció. Otro error (sin internet): se deja entrar y
-      // cada pantalla mostrará el problema con su botón de reintentar.
-      if (e.status == 401 || e.status == 403 || usuario == null) {
-        Api.i.token = null;
-        usuario = null;
-        await prefs.remove(_clave);
-        await prefs.remove(_claveUsuario);
+      // 401/403: el token venció o el usuario fue desactivado → al login.
+      // Sin internet se deja entrar: cada pantalla muestra su "Reintentar".
+      if (e.status == 401 || e.status == 403) {
+        await _limpiar(prefs);
+        notifyListeners();
       }
-    }
+    } catch (_) {/* cualquier otro fallo de red: se sigue con lo guardado */}
+  }
+
+  Future<void> _limpiar(SharedPreferences prefs) async {
+    Api.i.token = null;
+    usuario = null;
+    await prefs.remove(_clave);
+    await prefs.remove(_claveUsuario);
   }
 
   Future<void> iniciar(String correo, String password) async {

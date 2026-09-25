@@ -17,7 +17,12 @@ Future<void> main() async {
   // Si la API dice que el token venció, se cierra la sesión y main vuelve
   // a mostrar el login.
   Api.i.alVencerSesion = () => Sesion.i.cerrar();
-  await Sesion.i.restaurar();
+  try {
+    await Sesion.i.restaurar();
+  } catch (e) {
+    // Nunca dejar la app en negro por un problema al leer la sesión.
+    debugPrint('No se pudo restaurar la sesión: $e');
+  }
   runApp(const EssenceApp());
 }
 

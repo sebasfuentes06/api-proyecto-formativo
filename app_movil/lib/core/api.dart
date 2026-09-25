@@ -104,6 +104,10 @@ class Api {
       throw ApiException(0, 'Sin conexión a internet.');
     } on http.ClientException catch (e) {
       throw ApiException(0, 'No se pudo conectar con la API (${e.message}).');
+    } on HandshakeException {
+      throw ApiException(0, 'Conexión segura rechazada. Revisa la fecha y hora del teléfono.');
+    } catch (e) {
+      throw ApiException(0, 'No se pudo conectar con la API ($e).');
     }
 
     Map<String, dynamic> datos;

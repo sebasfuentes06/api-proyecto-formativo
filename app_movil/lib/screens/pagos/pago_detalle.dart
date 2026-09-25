@@ -42,7 +42,7 @@ class FilaPago extends StatelessWidget {
       ),
       title: Row(children: [
         Expanded(
-          child: Text(mostrarCliente ? (p.cliente ?? '') : '${nombresMetodo[p.metodo] ?? p.metodo}', overflow: TextOverflow.ellipsis),
+          child: Text(mostrarCliente ? (p.cliente ?? '') : nombresMetodo[p.metodo] ?? p.metodo, overflow: TextOverflow.ellipsis),
         ),
         Text(dinero(p.monto), style: TextStyle(fontWeight: FontWeight.w700, decoration: tachado ? TextDecoration.lineThrough : null)),
       ]),
