@@ -14,7 +14,7 @@ async function listar(filtros = {}) {
 
   if (filtros.search?.trim()) agregar("(pe.codigo ILIKE ? OR c.nombre ILIKE ?)", `%${filtros.search.trim()}%`);
   if (["pendiente", "confirmado", "cancelado"].includes(filtros.estado)) agregar("pe.estado = ?", filtros.estado);
-  if (["whatsapp", "punto_fisico"].includes(filtros.canal)) agregar("pe.canal = ?", filtros.canal);
+  if (["whatsapp", "punto_fisico", "app"].includes(filtros.canal)) agregar("pe.canal = ?", filtros.canal);
   if (filtros.id_cliente) agregar("pe.id_cliente = ?", Number(filtros.id_cliente));
 
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
@@ -24,7 +24,7 @@ async function listar(filtros = {}) {
     valores
   );
   const { rows } = await query(
-    `SELECT pe.id_pedido, pe.codigo, pe.fecha, pe.canal, pe.estado, pe.total, pe.notas,
+    `SELECT pe.id_pedido, pe.codigo, pe.fecha, pe.canal, pe.estado, pe.total, pe.notas, pe.metodo_pago,
             pe.id_cliente, c.nombre AS cliente, c.telefono AS cliente_telefono,
             pe.id_venta, v.numero_factura,
             (SELECT COALESCE(SUM(cantidad), 0)::INT FROM detalle_pedido d WHERE d.id_pedido = pe.id_pedido) AS unidades

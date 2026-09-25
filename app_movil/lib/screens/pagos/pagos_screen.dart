@@ -4,6 +4,7 @@ import '../../core/api.dart';
 import '../../core/contacto.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
+import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
@@ -11,16 +12,19 @@ import '../../widgets/perfil.dart';
 import '../clientes/cliente_detalle_screen.dart';
 import '../ventas/venta_detalle_screen.dart';
 import 'acciones_pago.dart';
+import 'pago_detalle.dart';
 
-/// Subproceso de pagos y abonos: cartera pendiente por cliente (con reporte
+/// Subproceso de pagos y abonos: pagos que reportan los clientes (el
+/// Administrador los aprueba), cartera pendiente por cliente (con reporte
 /// PDF y recordatorio por WhatsApp) e historial de pagos recibidos.
 class PagosScreen extends StatelessWidget {
   const PagosScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final admin = Sesion.i.esAdmin;
     return DefaultTabController(
-      length: 2,
+      length: admin ? 3 : 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Pagos y abonos'),
@@ -28,13 +32,21 @@ class PagosScreen extends StatelessWidget {
             IconButton(tooltip: 'Verificar pago Wompi', icon: const Icon(Icons.verified_outlined), onPressed: () => verificarPagoWompi(context)),
             const BotonPerfil(),
           ],
-          bottom: const TabBar(tabs: [Tab(text: 'Por cobrar'), Tab(text: 'Pagos recibidos')]),
+          bottom: TabBar(tabs: [
+            if (admin) const Tab(text: 'Por aprobar'),
+            const Tab(text: 'Por cobrar'),
+            const Tab(text: 'Recibidos'),
+          ]),
         ),
-        body: const TabBarView(children: [_Cartera(), _Historial()]),
+        body: TabBarView(children: [if (admin) const ListaPorAprobar(), const _Cartera(), const _Historial()]),
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pagos reportados por los clientes, esperando aprobación
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Cartera pendiente (reporte de pagos pendientes)
@@ -210,20 +222,7 @@ class _HistorialState extends State<_Historial> with AutomaticKeepAliveClientMix
             if (r != _recaudado) setState(() => _recaudado = r);
           },
           vacio: const EstadoVacio(icono: Icons.payments_outlined, titulo: 'No hay pagos registrados'),
-          itemBuilder: (ctx, p) => ListTile(
-            leading: CircleAvatar(
-              backgroundColor: p.anulado ? Theme.of(ctx).colorScheme.surfaceContainerHighest : const Color(0xFFE8F5E9),
-              child: Icon(p.metodo == 'wompi' ? Icons.credit_card : Icons.payments_outlined, color: p.anulado ? gris : verde),
-            ),
-            title: Row(children: [
-              Expanded(child: Text(p.cliente ?? '', overflow: TextOverflow.ellipsis)),
-              Text(dinero(p.monto),
-                  style: TextStyle(fontWeight: FontWeight.w700, decoration: p.anulado ? TextDecoration.lineThrough : null)),
-            ]),
-            subtitle: Text('${p.numeroFactura} · ${nombresMetodo[p.metodo] ?? p.metodo} · ${fechaHora(p.fecha)}'),
-            trailing: p.anulado ? const Etiqueta('Anulado', color: gris) : null,
-            onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => VentaDetalleScreen(idVenta: p.idVenta))),
-          ),
+          itemBuilder: (ctx, p) => FilaPago(pago: p, mostrarCliente: true),
         ),
       ),
     ]);

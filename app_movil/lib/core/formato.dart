@@ -44,3 +44,30 @@ const nombresMetodo = {
 };
 
 const nombresCanal = {'whatsapp': 'WhatsApp', 'punto_fisico': 'Punto físico', 'app': 'App'};
+
+/// Métodos con los que se puede vender o pedir (Wompi = pago en línea).
+const metodosVenta = ['efectivo', 'transferencia', 'nequi', 'daviplata', 'tarjeta', 'wompi'];
+
+/// Lo que puede escoger un cliente al hacer su pedido desde la app.
+const metodosPedidoCliente = {
+  'wompi': 'Pagar en línea con Wompi',
+  'transferencia': 'Transferencia (Nequi, Daviplata, banco)',
+  'efectivo': 'Efectivo en el punto físico',
+};
+
+/// Qué pasa después, según cómo escogió pagar el cliente.
+const ayudaMetodoPedido = {
+  'wompi': 'Cuando confirmemos tu pedido, pagas desde la app con tarjeta, PSE o Nequi.',
+  'transferencia': 'Cuando confirmemos tu pedido, transfieres y subes la foto del comprobante.',
+  'efectivo': 'Pagas cuando recojas o recibas tu pedido en el punto físico.',
+};
+
+/// Lo que un cliente puede reportar como ya pagado (con comprobante).
+const metodosReporte = ['transferencia', 'nequi', 'daviplata'];
+
+const nombresEstadoPago = {
+  'aplicado': 'Aplicado',
+  'anulado': 'Anulado',
+  'pendiente': 'Por aprobar',
+  'rechazado': 'Rechazado',
+};

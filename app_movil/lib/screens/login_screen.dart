@@ -6,7 +6,10 @@ import 'acceso/recuperar_screen.dart';
 import 'acceso/registro_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.correoInicial});
+
+  /// Correo ya escrito (al volver del registro).
+  final String? correoInicial;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -14,7 +17,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _form = GlobalKey<FormState>();
-  final _correo = TextEditingController();
+  late final _correo = TextEditingController(text: widget.correoInicial);
   final _clave = TextEditingController();
   bool _ver = false;
   bool _cargando = false;
@@ -59,6 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     return Scaffold(
+      // Se abre desde la vitrina: flecha para volver a ver los productos.
+      appBar: Navigator.canPop(context) ? AppBar(title: const Text('Iniciar sesión')) : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

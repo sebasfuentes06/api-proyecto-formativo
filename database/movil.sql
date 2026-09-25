@@ -333,3 +333,57 @@ CREATE TABLE IF NOT EXISTS codigos_recuperacion (
     CONSTRAINT fk_codigos_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_codigos_usuario ON codigos_recuperacion (id_usuario);
+
+-- ============================================================
+-- 11. DATOS DEL CLIENTE, MÉTODO DE PAGO Y PAGOS REPORTADOS
+-- ------------------------------------------------------------
+-- * clientes.tipo_documento: CC, TI, CE, PPT, PAS o NIT.
+-- * ventas.metodo_pago / pedidos.metodo_pago: cómo se va a pagar
+--   (efectivo en el punto físico, transferencia, Wompi...).
+-- * pagos "pendiente": un Cliente reporta desde la app que ya pagó (por
+--   transferencia, Nequi...) y adjunta el comprobante. NO descuenta saldo
+--   hasta que el Administrador lo aprueba ("aplicado") o lo rechaza
+--   ("rechazado"). La vista v_ventas_saldo ya solo suma los "aplicado".
+-- ============================================================
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(5);
+ALTER TABLE ventas   ADD COLUMN IF NOT EXISTS metodo_pago    VARCHAR(20);
+ALTER TABLE pedidos  ADD COLUMN IF NOT EXISTS metodo_pago    VARCHAR(20);
+ALTER TABLE pagos    ADD COLUMN IF NOT EXISTS motivo_rechazo VARCHAR(250);
+ALTER TABLE pagos    ADD COLUMN IF NOT EXISTS revisado_por   INT;
+ALTER TABLE pagos    ADD COLUMN IF NOT EXISTS revisado_en    TIMESTAMP;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_clientes_tipo_documento') THEN
+    ALTER TABLE clientes ADD CONSTRAINT chk_clientes_tipo_documento
+      CHECK (tipo_documento IN ('CC', 'TI', 'CE', 'PPT', 'PAS', 'NIT'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_ventas_metodo_pago') THEN
+    ALTER TABLE ventas ADD CONSTRAINT chk_ventas_metodo_pago
+      CHECK (metodo_pago IN ('efectivo', 'transferencia', 'nequi', 'daviplata', 'tarjeta', 'wompi'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_pedidos_metodo_pago') THEN
+    ALTER TABLE pedidos ADD CONSTRAINT chk_pedidos_metodo_pago
+      CHECK (metodo_pago IN ('efectivo', 'transferencia', 'nequi', 'daviplata', 'tarjeta', 'wompi'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_pagos_revisado_por') THEN
+    ALTER TABLE pagos ADD CONSTRAINT fk_pagos_revisado_por
+      FOREIGN KEY (revisado_por) REFERENCES usuarios (id_usuario);
+  END IF;
+END $$;
+
+ALTER TABLE pagos DROP CONSTRAINT IF EXISTS chk_pagos_estado;
+ALTER TABLE pagos ADD CONSTRAINT chk_pagos_estado
+  CHECK (estado IN ('aplicado', 'anulado', 'pendiente', 'rechazado'));
+
+CREATE INDEX IF NOT EXISTS idx_pagos_estado ON pagos (estado);
+
+-- Comprobante de pago (foto o captura de la transferencia). Tabla aparte,
+-- como la imagen del producto, para que listar pagos no cargue los bytes.
+CREATE TABLE IF NOT EXISTS pago_comprobante (
+    id_pago     INT PRIMARY KEY,
+    contenido   BYTEA NOT NULL,
+    tipo_mime   VARCHAR(30) NOT NULL DEFAULT 'image/jpeg',
+    subido_en   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_comprobante_pago FOREIGN KEY (id_pago) REFERENCES pagos (id_pago) ON DELETE CASCADE
+);

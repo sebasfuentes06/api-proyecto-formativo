@@ -8,10 +8,12 @@ import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
 import '../pagos/acciones_pago.dart';
+import '../pagos/pago_detalle.dart';
 import '../ventas/venta_detalle_screen.dart';
 
-/// "Mi cuenta" del rol Cliente: cuánto debe, qué compras tienen saldo (con
-/// botón para pagarlas en línea con Wompi) y sus últimos pagos.
+/// "Mi cuenta" del rol Cliente: cuánto debe, qué compras tienen saldo (para
+/// pagarlas en línea con Wompi o reportar una transferencia con su
+/// comprobante) y sus pagos, incluidos los que están por aprobar.
 class MiCuentaScreen extends StatefulWidget {
   const MiCuentaScreen({super.key});
 
@@ -54,9 +56,36 @@ class _MiCuentaScreenState extends State<MiCuentaScreen> {
 
   /// Para pagar hace falta la venta completa (saldo al día, cliente...).
   Future<void> _pagar(int idVenta) async {
+    final forma = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ListTile(title: Text('¿Cómo vas a pagar?', style: TextStyle(fontWeight: FontWeight.w600))),
+          ListTile(
+            leading: const Icon(Icons.credit_card),
+            title: const Text('Pagar en línea con Wompi'),
+            subtitle: const Text('Tarjeta, PSE, Nequi o Bancolombia. Se abona al instante.'),
+            onTap: () => Navigator.pop(ctx, 'wompi'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.receipt_long),
+            title: const Text('Ya transferí: reportar pago'),
+            subtitle: const Text('Sube la foto del comprobante. La administradora lo aprueba.'),
+            onTap: () => Navigator.pop(ctx, 'reporte'),
+          ),
+        ]),
+      ),
+    );
+    if (forma == null || !mounted) return;
     final r = await conCarga(context, Api.i.get('/api/ventas/$idVenta'), avisarCambio: false);
     if (r == null || !mounted) return;
-    await pagarConWompi(context, Venta.desdeJson(r['datos']));
+    final venta = Venta.desdeJson(r['datos']);
+    if (forma == 'wompi') {
+      await pagarConWompi(context, venta);
+    } else if (await reportarPago(context, venta)) {
+      await _cargar();
+    }
   }
 
   @override
@@ -104,22 +133,21 @@ class _MiCuentaScreenState extends State<MiCuentaScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(
-                'El pago en línea se hace con Wompi (tarjeta, PSE, Nequi o Bancolombia). '
-                'Cuando termines, vuelve y desliza hacia abajo para ver tu saldo al día.',
+                'Paga en línea con Wompi o, si ya transferiste, reporta el pago con la foto del comprobante. '
+                'Desliza hacia abajo para ver tu saldo al día.',
                 style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.outline),
               ),
             ),
           ],
           const TituloSeccion('Mis pagos'),
           if (pagos.isEmpty) const ListTile(title: Text('Aún no hay pagos registrados')),
-          for (final p in pagos)
-            ListTile(
-              leading: Icon(p.metodo == 'wompi' ? Icons.credit_card : Icons.payments_outlined, color: p.anulado ? gris : verde),
-              title: Text('${dinero(p.monto)} · ${nombresMetodo[p.metodo] ?? p.metodo}',
-                  style: TextStyle(decoration: p.anulado ? TextDecoration.lineThrough : null)),
-              subtitle: Text('${p.numeroFactura ?? ''} · ${fechaHora(p.fecha)}'),
-              trailing: p.anulado ? const Etiqueta('Anulado', color: gris) : null,
+          if (pagos.any((p) => p.porAprobar))
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text('Los pagos "Por aprobar" se descuentan de tu saldo cuando la administradora los revisa.',
+                  style: tema.textTheme.bodySmall?.copyWith(color: ambar)),
             ),
+          for (final p in pagos) FilaPago(pago: p),
         ]),
       );
     }

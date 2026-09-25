@@ -32,6 +32,10 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   late final _notas = TextEditingController(text: widget.pedido?.notas);
   bool _cargandoEdicion = false;
 
+  /// Cómo va a pagar. Obligatorio para el Cliente (Wompi, transferencia o
+  /// efectivo en el punto físico); opcional para el equipo.
+  late String? _metodo = widget.pedido?.metodoPago;
+
   bool get _editando => widget.pedido != null;
   double get _total => _lineas.fold(0, (s, l) => s + l.subtotal);
 
@@ -94,8 +98,13 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       mostrarMensaje(context, 'Agrega al menos un producto.', error: true);
       return;
     }
+    if (Sesion.i.esCliente && _metodo == null) {
+      mostrarMensaje(context, 'Elige cómo vas a pagar tu pedido.', error: true);
+      return;
+    }
     final datos = {
       'id_cliente': _cliente!.id,
+      if (_metodo != null) 'metodo_pago': _metodo,
       if (!Sesion.i.esCliente) 'canal': _canal,
       'direccion_entrega': _direccion.text.trim(),
       'notas': _notas.text.trim(),
@@ -170,6 +179,33 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
               ],
               const TituloSeccion('Productos'),
               EditorCarrito(lineas: _lineas, onCambio: () => setState(() {})),
+              TituloSeccion(Sesion.i.esCliente ? '¿Cómo vas a pagar? *' : 'Forma de pago (opcional)'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Sesion.i.esCliente
+                    ? Column(children: [
+                        for (final e in metodosPedidoCliente.entries)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: _metodo == e.key ? tema.colorScheme.primary : tema.colorScheme.outlineVariant,
+                                width: _metodo == e.key ? 2 : 1,
+                              ),
+                            ),
+                            child: ListTile(
+                              leading: Icon(iconoMetodo(e.key), color: _metodo == e.key ? tema.colorScheme.primary : null),
+                              title: Text(e.value),
+                              subtitle: Text(ayudaMetodoPedido[e.key]!),
+                              trailing: Icon(_metodo == e.key ? Icons.radio_button_checked : Icons.radio_button_off,
+                                  color: _metodo == e.key ? tema.colorScheme.primary : null),
+                              onTap: () => setState(() => _metodo = e.key),
+                            ),
+                          ),
+                      ])
+                    : SelectorMetodo(valor: _metodo, onCambio: (m) => setState(() => _metodo = m)),
+              ),
               const TituloSeccion('Entrega'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

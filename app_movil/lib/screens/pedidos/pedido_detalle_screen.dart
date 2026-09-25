@@ -77,7 +77,7 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (_) => _HojaCierre(subtotal: p.total),
+      builder: (_) => _HojaCierre(subtotal: p.total, metodo: p.metodoPago),
     );
     if (cierre == null || !mounted) return;
     final r = await conCarga(context, Api.i.post('/api/pedidos/${p.id}/convertir', cierre));
@@ -151,7 +151,9 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VentaDetalleScreen(idVenta: p.idVenta!))),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                       icon: const Icon(Icons.receipt_long),
-                      label: Text('Ver venta ${p.numeroFactura ?? ''}'),
+                      label: Text(Sesion.i.esCliente && p.metodoPago != 'efectivo'
+                          ? 'Ver compra y pagar'
+                          : 'Ver venta ${p.numeroFactura ?? ''}'),
                     )
                   : const SizedBox.shrink(),
         ),
@@ -164,9 +166,19 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
             child: Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
               etiquetaEstadoPedido(p.estado),
               etiquetaCanal(p.canal),
+              if (p.metodoPago != null) Etiqueta(nombresMetodo[p.metodoPago] ?? p.metodoPago!, color: azul, icono: iconoMetodo(p.metodoPago!)),
               Text(fechaHora(p.fecha), style: TextStyle(color: tema.colorScheme.outline)),
             ]),
           ),
+          if (p.metodoPago != null && p.estado != 'cancelado')
+            Card(
+              color: tema.colorScheme.secondaryContainer,
+              child: ListTile(
+                leading: Icon(iconoMetodo(p.metodoPago!)),
+                title: Text(metodosPedidoCliente[p.metodoPago] ?? 'Pago: ${nombresMetodo[p.metodoPago]}'),
+                subtitle: Text(_instruccionPago(p)),
+              ),
+            ),
           if (faltantes > 0 && p.pendiente)
             Card(
               color: tema.colorScheme.errorContainer,
@@ -209,10 +221,30 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   }
 }
 
-/// Hoja para cerrar la venta al convertir un pedido: descuento y pago inicial.
+/// Qué sigue con el pago, según el método y el estado del pedido.
+String _instruccionPago(Pedido p) {
+  final m = p.metodoPago;
+  if (p.pendiente) {
+    if (!Sesion.i.esCliente) return 'El cliente eligió esta forma de pago. Al convertirlo en venta queda registrada.';
+    return switch (m) {
+      'wompi' => 'Cuando confirmemos tu pedido podrás pagarlo en línea desde la app.',
+      'efectivo' => 'Pagas en efectivo en el punto físico al recoger o recibir tu pedido.',
+      _ => 'Cuando confirmemos tu pedido, transfiere y reporta el pago con la foto del comprobante.',
+    };
+  }
+  return switch (m) {
+    'wompi' => 'Pedido confirmado: entra a la compra y toca "Pagar en línea".',
+    'efectivo' => 'Pedido confirmado: el pago se hace en efectivo en el punto físico.',
+    _ => 'Pedido confirmado: transfiere y entra a la compra para "Reportar pago" con el comprobante.',
+  };
+}
+
+/// Hoja para cerrar la venta al convertir un pedido: método de pago,
+/// descuento y pago inicial.
 class _HojaCierre extends StatefulWidget {
-  const _HojaCierre({required this.subtotal});
+  const _HojaCierre({required this.subtotal, this.metodo});
   final double subtotal;
+  final String? metodo;
 
   @override
   State<_HojaCierre> createState() => _HojaCierreState();
@@ -221,8 +253,11 @@ class _HojaCierre extends StatefulWidget {
 class _HojaCierreState extends State<_HojaCierre> {
   final _form = GlobalKey<FormState>();
   final _descuento = TextEditingController();
-  final _pago = DatosPago();
-  bool _registrarPago = true;
+  late final _pago = DatosPago(metodo: widget.metodo == null || widget.metodo == 'wompi' ? 'efectivo' : widget.metodo!);
+  // Si el cliente va a pagar con Wompi o transferencia, normalmente todavía
+  // no ha pagado nada al confirmar el pedido.
+  late bool _registrarPago = widget.metodo == null || widget.metodo == 'efectivo';
+  late String? _metodo = widget.metodo;
 
   double get _total => widget.subtotal - (leerDinero(_descuento.text) ?? 0);
 
@@ -254,14 +289,30 @@ class _HojaCierreState extends State<_HojaCierre> {
             FilaValor('Subtotal', dinero(widget.subtotal)),
             FilaValor('Total a pagar', dinero(_total < 0 ? 0.0 : _total), destacado: true),
             const Divider(height: 24),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('El cliente paga ahora'),
-              subtitle: const Text('Pago total o abono inicial'),
-              value: _registrarPago,
-              onChanged: (v) => setState(() => _registrarPago = v),
+            Text('Método de pago *', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SelectorMetodo(
+              valor: _metodo,
+              onCambio: (m) => setState(() {
+                _metodo = m;
+                if (m != 'wompi') _pago.metodo = m;
+              }),
             ),
-            if (_registrarPago) CamposPago(key: ValueKey(_total), datos: _pago, maximo: _total < 0 ? 0.0 : _total),
+            if (_metodo != 'wompi') ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('El cliente paga ahora'),
+                subtitle: const Text('Pago total o abono inicial'),
+                value: _registrarPago,
+                onChanged: (v) => setState(() => _registrarPago = v),
+              ),
+              if (_registrarPago)
+                CamposPago(key: ValueKey('$_total|$_metodo'), datos: _pago, maximo: _total < 0 ? 0.0 : _total),
+            ] else
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('El cliente paga con Wompi desde su app (o le envías el link desde la venta).'),
+              ),
             const SizedBox(height: 20),
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
@@ -270,8 +321,9 @@ class _HojaCierreState extends State<_HojaCierre> {
               onPressed: () {
                 if (!_form.currentState!.validate()) return;
                 Navigator.pop(context, {
+                  'metodo_pago': _metodo,
                   'descuento': leerDinero(_descuento.text) ?? 0,
-                  if (_registrarPago && (_pago.monto ?? 0) > 0) 'pago_inicial': _pago.aJson(),
+                  if (_metodo != 'wompi' && _registrarPago && (_pago.monto ?? 0) > 0) 'pago_inicial': _pago.aJson(),
                 });
               },
             ),

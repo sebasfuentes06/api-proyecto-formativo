@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
+import '../../widgets/campos_persona.dart';
 import '../../widgets/comunes.dart';
 
 /// Registrarse. La cuenta queda PENDIENTE: la administradora la revisa y,
@@ -15,12 +16,7 @@ class RegistroScreen extends StatefulWidget {
 
 class _RegistroScreenState extends State<RegistroScreen> {
   final _form = GlobalKey<FormState>();
-  final _nombre = TextEditingController();
-  final _documento = TextEditingController();
-  final _telefono = TextEditingController();
-  final _direccion = TextEditingController();
-  final _ciudad = TextEditingController(text: 'La Pintada');
-  final _correo = TextEditingController();
+  final _datos = DatosPersona();
   final _clave = TextEditingController();
   final _repetir = TextEditingController();
   bool _ver = false;
@@ -28,14 +24,18 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
   @override
   void dispose() {
-    for (final c in [_nombre, _documento, _telefono, _direccion, _ciudad, _correo, _clave, _repetir]) {
+    _datos.dispose();
+    for (final c in [_clave, _repetir]) {
       c.dispose();
     }
     super.dispose();
   }
 
   Future<void> _enviar() async {
-    if (!_form.currentState!.validate()) return;
+    if (!_form.currentState!.validate()) {
+      mostrarMensaje(context, 'Revisa los campos marcados en rojo.', error: true);
+      return;
+    }
     if (!_aceptaDatos) {
       mostrarMensaje(context, 'Debes aceptar el tratamiento de datos personales.', error: true);
       return;
@@ -43,12 +43,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
     final r = await conCarga(
       context,
       Api.i.post('/api/auth/registro', {
-        'nombre': _nombre.text.trim(),
-        'documento': _documento.text.trim(),
-        'telefono': _telefono.text.trim(),
-        'direccion': _direccion.text.trim(),
-        'ciudad': _ciudad.text.trim(),
-        'correo': _correo.text.trim(),
+        ..._datos.aJson(),
         'password': _clave.text,
         'acepta_datos': true,
       }),
@@ -65,7 +60,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
         actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Entendido'))],
       ),
     );
-    if (mounted) Navigator.pop(context, _correo.text.trim());
+    if (mounted) Navigator.pop(context, _datos.correo.text.trim());
   }
 
   void _verPolitica() {
@@ -99,45 +94,10 @@ class _RegistroScreenState extends State<RegistroScreen> {
             style: TextStyle(color: Theme.of(context).colorScheme.outline),
           ),
           const TituloSeccion('Tus datos'),
-          TextFormField(
-            controller: _nombre,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Nombre completo *', prefixIcon: Icon(Icons.person_outline)),
-            validator: (v) => (v ?? '').trim().length < 3 ? 'Escribe tu nombre completo' : null,
-          ),
-          espacio,
-          TextFormField(
-            controller: _documento,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Documento (opcional)', prefixIcon: Icon(Icons.badge_outlined)),
-          ),
-          espacio,
-          TextFormField(
-            controller: _telefono,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Celular / WhatsApp *', prefixIcon: Icon(Icons.phone_outlined)),
-            validator: (v) => RegExp(r'^[+()\d\s-]{7,20}$').hasMatch((v ?? '').trim()) ? null : 'Escribe un teléfono válido',
-          ),
-          espacio,
-          TextFormField(
-            controller: _direccion,
-            decoration: const InputDecoration(labelText: 'Dirección', prefixIcon: Icon(Icons.home_outlined)),
-          ),
-          espacio,
-          TextFormField(
-            controller: _ciudad,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Ciudad / vereda', prefixIcon: Icon(Icons.location_city_outlined)),
-          ),
-          const TituloSeccion('Tu acceso'),
-          TextFormField(
-            controller: _correo,
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(labelText: 'Correo *', prefixIcon: Icon(Icons.mail_outline)),
-            validator: (v) => RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch((v ?? '').trim()) ? null : 'Correo no válido',
-          ),
-          espacio,
+          // Nombre, tipo y número de documento, celular, municipio (API),
+          // dirección y correo, en ese orden.
+          CamposPersona(datos: _datos, correoObligatorio: true),
+          const TituloSeccion('Tu contraseña'),
           TextFormField(
             controller: _clave,
             obscureText: !_ver,

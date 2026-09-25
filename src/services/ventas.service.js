@@ -1,4 +1,5 @@
 import { ErrorHttp } from "../middlewares/errores.js";
+import { leerImagenBase64 } from "../utils/imagen.js";
 
 /**
  * Reglas de negocio compartidas por Ventas, Pedidos y Pagos.
@@ -10,6 +11,24 @@ import { ErrorHttp } from "../middlewares/errores.js";
 
 const METODOS_PAGO = ["efectivo", "transferencia", "nequi", "daviplata", "tarjeta"];
 const CANALES = ["whatsapp", "punto_fisico", "app"];
+// Cómo se va a pagar una venta o un pedido. Wompi no es un método para
+// registrar a mano (entra solo cuando Wompi confirma), pero sí se puede
+// escoger como forma de pago.
+const METODOS_VENTA = [...METODOS_PAGO, "wompi"];
+// Lo que puede reportar un Cliente desde la app (pagos que no se ven en caja).
+const METODOS_REPORTE = ["transferencia", "nequi", "daviplata"];
+
+/** Método de pago de una venta o pedido: obligatorio y de la lista. */
+function validarMetodoVenta(metodo, { obligatorio = true } = {}) {
+  if (metodo === undefined || metodo === null || metodo === "") {
+    if (!obligatorio) return null;
+    throw new ErrorHttp(400, "Elige el método de pago.", { metodo_pago: `Usa uno de: ${METODOS_VENTA.join(", ")}.` });
+  }
+  if (!METODOS_VENTA.includes(metodo)) {
+    throw new ErrorHttp(400, "Método de pago no válido.", { metodo_pago: `Usa uno de: ${METODOS_VENTA.join(", ")}.` });
+  }
+  return metodo;
+}
 
 const redondear = (n) => Math.round(Number(n) * 100) / 100;
 
@@ -124,12 +143,15 @@ function validarPago({ monto, metodo }, { maximo }) {
   return valor;
 }
 
-async function insertarPago(db, { id_venta, monto, metodo, referencia, nota, id_usuario, wompi_transaccion_id = null }) {
+async function insertarPago(
+  db,
+  { id_venta, monto, metodo, referencia, nota, id_usuario, wompi_transaccion_id = null, estado = "aplicado" }
+) {
   const { rows } = await db.query(
-    `INSERT INTO pagos (id_venta, monto, metodo, referencia, nota, id_usuario, wompi_transaccion_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO pagos (id_venta, monto, metodo, referencia, nota, id_usuario, wompi_transaccion_id, estado)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [id_venta, monto, metodo, referencia?.trim() || null, nota?.trim() || null, id_usuario ?? null, wompi_transaccion_id]
+    [id_venta, monto, metodo, referencia?.trim() || null, nota?.trim() || null, id_usuario ?? null, wompi_transaccion_id, estado]
   );
   return rows[0];
 }
@@ -144,6 +166,9 @@ async function registrarVenta(db, datos) {
   const canal = datos.canal ?? "punto_fisico";
   if (!CANALES.includes(canal)) throw new ErrorHttp(400, "Canal no válido.", { canal: CANALES.join(" o ") });
 
+  // Si no mandan el método de la venta pero sí un pago inicial, se toma ese.
+  const metodoPago = validarMetodoVenta(datos.metodo_pago ?? datos.pago_inicial?.metodo);
+
   const items = await revisarProductos(db, normalizarItems(datos.items), { bloquear: true });
 
   const subtotal = redondear(items.reduce((s, i) => s + i.cantidad * i.precio_unitario, 0));
@@ -154,10 +179,10 @@ async function registrarVenta(db, datos) {
   const total = redondear(subtotal - descuento);
 
   const { rows } = await db.query(
-    `INSERT INTO ventas (id_cliente, id_pedido, canal, subtotal, descuento, total, notas, id_usuario)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO ventas (id_cliente, id_pedido, canal, subtotal, descuento, total, notas, id_usuario, metodo_pago)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id_venta, numero_factura`,
-    [cliente.id_cliente, datos.id_pedido ?? null, canal, subtotal, descuento, total, datos.notas?.trim() || null, datos.id_usuario ?? null]
+    [cliente.id_cliente, datos.id_pedido ?? null, canal, subtotal, descuento, total, datos.notas?.trim() || null, datos.id_usuario ?? null, metodoPago]
   );
   const venta = rows[0];
 
@@ -174,13 +199,18 @@ async function registrarVenta(db, datos) {
   await db.query("UPDATE clientes SET ultima_compra = CURRENT_TIMESTAMP WHERE id_cliente = $1", [cliente.id_cliente]);
 
   let pago = null;
-  const inicial = datos.pago_inicial;
+  // El pago inicial usa por defecto el método de la venta.
+  const inicial = datos.pago_inicial && { ...datos.pago_inicial, metodo: datos.pago_inicial.metodo ?? metodoPago };
   if (inicial && Number(inicial.monto) > 0) {
     const monto = validarPago(inicial, { maximo: total });
     pago = await insertarPago(db, { ...inicial, monto, id_venta: venta.id_venta, id_usuario: datos.id_usuario });
+    if (inicial.comprobante) {
+      const { bytes, tipo } = leerImagenBase64(inicial.comprobante);
+      await db.query("INSERT INTO pago_comprobante (id_pago, contenido, tipo_mime) VALUES ($1, $2, $3)", [pago.id_pago, bytes, tipo]);
+    }
   }
 
-  return { ...venta, total, pago };
+  return { ...venta, total, pago, metodo_pago: metodoPago };
 }
 
 /** Saldo de una venta, bloqueando su fila para que dos abonos no se crucen. */
@@ -197,7 +227,10 @@ async function saldoVenta(db, idVenta, { bloquear = true } = {}) {
 
 export {
   METODOS_PAGO,
+  METODOS_VENTA,
+  METODOS_REPORTE,
   CANALES,
+  validarMetodoVenta,
   redondear,
   normalizarItems,
   clienteActivo,

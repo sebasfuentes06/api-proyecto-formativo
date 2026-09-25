@@ -124,8 +124,15 @@ async function main() {
   // ------------------------------------------------------------------
   titulo("Preparación: cliente y productos");
   const marca = Date.now();
-  r = await pedir("POST", "/api/clientes", { nombre: `Cliente App ${marca}`, telefono: "3001234567", direccion: "Calle 1 # 2-3", ciudad: "La Pintada" });
-  comprobar("cliente sin correo se crea (201)", r.estado === 201, r.cuerpo);
+  const fichaBase = { nombre: `Cliente App ${marca}`, tipo_documento: "CC", documento: String(marca).slice(-10), telefono: "3001234567", ciudad: "La Pintada", direccion: "Calle 1 # 2-3" };
+  r = await pedir("POST", "/api/clientes", { ...fichaBase, tipo_documento: undefined, documento: undefined });
+  comprobar("desde la app, cliente sin tipo ni número de documento: 400", r.estado === 400 && !!r.cuerpo?.detalles?.tipo_documento && !!r.cuerpo?.detalles?.documento, r.cuerpo);
+  r = await pedir("POST", "/api/clientes", { ...fichaBase, telefono: "300-12a" });
+  comprobar("celular con letras o incompleto: 400", r.estado === 400 && !!r.cuerpo?.detalles?.telefono, r.cuerpo);
+  r = await pedir("POST", "/api/clientes", { ...fichaBase, ciudad: "" });
+  comprobar("cliente sin municipio: 400", r.estado === 400 && !!r.cuerpo?.detalles?.ciudad);
+  r = await pedir("POST", "/api/clientes", fichaBase);
+  comprobar("cliente sin correo se crea (201) con tipo de documento", r.estado === 201 && r.cuerpo?.datos?.tipo_documento === "CC", r.cuerpo);
   const idCliente = r.cuerpo?.datos?.id_cliente;
   comprobar("el cliente nuevo arranca sin saldo", num(r.cuerpo?.datos?.saldo_pendiente) === 0);
 
@@ -203,30 +210,37 @@ async function main() {
 
   // ------------------------------------------------------------------
   titulo("Ventas directas");
-  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 4 }] });
+  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1 }] });
+  comprobar("venta sin método de pago: 400", r.estado === 400 && !!r.cuerpo?.detalles?.metodo_pago, r.cuerpo);
+  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "bitcoin", items: [{ id_producto: pB.id_producto, cantidad: 1 }] });
+  comprobar("venta con método de pago inventado: 400", r.estado === 400);
+  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "efectivo", items: [{ id_producto: pB.id_producto, cantidad: 4 }] });
   comprobar("vender más que el stock: 409", r.estado === 409, r.cuerpo);
-  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1 }], descuento: 999999 });
+  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1 }], descuento: 999999, metodo_pago: "efectivo" });
   comprobar("descuento mayor que el subtotal: 400", r.estado === 400);
   r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1 }], pago_inicial: { monto: 60000, metodo: "efectivo" } });
   comprobar("pago inicial mayor que el total: 409", r.estado === 409, r.cuerpo);
   comprobar("una venta rechazada no toca el stock (B sigue en 3)", (await stockDe(pB.id_producto)) === 3);
 
   r = await pedir("POST", "/api/ventas", {
-    id_cliente: idCliente, canal: "punto_fisico",
+    id_cliente: idCliente, canal: "punto_fisico", metodo_pago: "nequi",
     items: [{ id_producto: pB.id_producto, cantidad: 1 }],
-    pago_inicial: { monto: 50000, metodo: "efectivo" }
+    pago_inicial: { monto: 50000, referencia: "NQ-1", comprobante: { base64: png1x1, tipo_mime: "image/png" } }
   });
   comprobar("venta de contado: 201 y pagada", r.estado === 201 && r.cuerpo?.datos?.estado_pago === "pagada", r.cuerpo);
+  comprobar("la venta guarda su método de pago y el pago inicial lo hereda",
+    r.cuerpo?.datos?.metodo_pago === "nequi" && r.cuerpo?.datos?.pagos?.[0]?.metodo === "nequi", r.cuerpo?.datos);
+  comprobar("el pago inicial guarda su comprobante", r.cuerpo?.datos?.pagos?.[0]?.tiene_comprobante === true);
   const ventaContado = r.cuerpo?.datos;
 
-  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1, precio_unitario: 45000 }] });
+  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "wompi", items: [{ id_producto: pB.id_producto, cantidad: 1, precio_unitario: 45000 }] });
   comprobar("venta a crédito con precio especial: 201 y pendiente", r.estado === 201 && r.cuerpo?.datos?.estado_pago === "pendiente" && num(r.cuerpo?.datos?.total) === 45000, r.cuerpo);
   const ventaCredito = r.cuerpo?.datos;
 
   // Dos ventas simultáneas por la última unidad: solo una debe pasar.
   const [c1, c2] = await Promise.all([
-    pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1 }] }),
-    pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pB.id_producto, cantidad: 1 }] })
+    pedir("POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "efectivo", items: [{ id_producto: pB.id_producto, cantidad: 1 }] }),
+    pedir("POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "efectivo", items: [{ id_producto: pB.id_producto, cantidad: 1 }] })
   ]);
   const estados = [c1.estado, c2.estado].sort();
   comprobar("dos ventas simultáneas del último frasco: una 201 y otra 409", estados[0] === 201 && estados[1] === 409, estados);
@@ -332,7 +346,7 @@ async function main() {
   comprobar("Vendedor sí edita datos de un cliente", r.estado === 200, r.cuerpo);
   r = await como(tV, "PUT", `/api/clientes/${idCliente}`, { estado: false });
   comprobar("Vendedor no desactiva clientes (403)", r.estado === 403);
-  r = await como(tV, "POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  r = await como(tV, "POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "transferencia", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
   comprobar("Vendedor registra una venta", r.estado === 201, r.cuerpo);
   const ventaVendedor = r.cuerpo?.datos;
   r = await como(tV, "POST", "/api/pagos", { id_venta: ventaVendedor?.id_venta, monto: 10000, metodo: "efectivo" });
@@ -362,14 +376,19 @@ async function main() {
   comprobar("Cliente solo ve sus pagos", r.estado === 200 && r.cuerpo?.datos?.every((p) => p.id_cliente === idCliente));
   r = await como(tC, "POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
   comprobar("Cliente no registra ventas (403)", r.estado === 403);
-  r = await como(tC, "POST", "/api/pagos", { id_venta: ventaVendedor?.id_venta, monto: 1000, metodo: "efectivo" });
-  comprobar("Cliente no registra abonos a mano (403)", r.estado === 403);
+  r = await como(tC, "POST", "/api/pagos", { id_venta: ventaVendedor?.id_venta, monto: 1000, metodo: "efectivo", referencia: "x" });
+  comprobar("Cliente no puede reportar pagos en efectivo (400)", r.estado === 400);
   r = await como(tC, "GET", "/api/pagos/pendientes");
   comprobar("Cliente no ve la cartera del negocio (403)", r.estado === 403);
   r = await como(tC, "GET", "/api/dashboard/resumen");
   comprobar("Cliente no ve el resumen del negocio (403)", r.estado === 403);
-  r = await como(tC, "POST", "/api/pedidos", { id_cliente: otroCliente, canal: "punto_fisico", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
-  comprobar("pedido del Cliente queda a su nombre y por canal app", r.estado === 201 && r.cuerpo?.datos?.id_cliente === idCliente && r.cuerpo?.datos?.canal === "app", r.cuerpo);
+  r = await como(tC, "POST", "/api/pedidos", { canal: "app", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("pedido del Cliente sin escoger cómo pagar: 400", r.estado === 400 && !!r.cuerpo?.detalles?.metodo_pago, r.cuerpo);
+  r = await como(tC, "POST", "/api/pedidos", { canal: "app", metodo_pago: "tarjeta", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("el Cliente solo escoge Wompi, transferencia o efectivo (400)", r.estado === 400);
+  r = await como(tC, "POST", "/api/pedidos", { id_cliente: otroCliente, canal: "punto_fisico", metodo_pago: "transferencia", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("pedido del Cliente queda a su nombre, por canal app y con su forma de pago",
+    r.estado === 201 && r.cuerpo?.datos?.id_cliente === idCliente && r.cuerpo?.datos?.canal === "app" && r.cuerpo?.datos?.metodo_pago === "transferencia", r.cuerpo);
   const pedidoCliente = r.cuerpo?.datos;
   r = await como(tC, "POST", `/api/pedidos/${pedidoCliente?.id_pedido}/convertir`, {});
   comprobar("Cliente no convierte su pedido en venta (403)", r.estado === 403);
@@ -379,6 +398,71 @@ async function main() {
   comprobar("Cliente solo ve sus pedidos", r.estado === 200 && r.cuerpo?.datos?.every((p) => p.id_cliente === idCliente));
   r = await como(tC, "GET", "/api/productos?limit=5");
   comprobar("Cliente ve el catálogo", r.estado === 200 && r.cuerpo?.datos?.length > 0);
+
+  // --- El cliente paga por Wompi: su pedido, al confirmarse, hereda el método
+  r = await como(tC, "POST", "/api/pedidos", { metodo_pago: "wompi", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  const pedidoWompi = r.cuerpo?.datos;
+  r = await pedir("POST", `/api/pedidos/${pedidoWompi?.id_pedido}/convertir`, {});
+  comprobar("al convertir el pedido, la venta queda con el método que eligió el cliente", r.estado === 201 && r.cuerpo?.datos?.metodo_pago === "wompi", r.cuerpo);
+  if (r.cuerpo?.datos) await pedir("POST", `/api/ventas/${r.cuerpo.datos.id_venta}/anular`, { motivo: "Limpieza de pruebas" });
+  r = await como(tC, "GET", "/api/pagos/datos-pago");
+  comprobar("el Cliente consulta los datos para pagar", r.estado === 200 && "transferencia" in (r.cuerpo?.datos ?? {}) && !!r.cuerpo?.datos?.punto_fisico);
+
+  // ------------------------------------------------------------------
+  titulo("Pagos reportados por el cliente (con comprobante)");
+  const idVV = ventaVendedor?.id_venta;
+  const saldoDe = async (id) => num((await pedir("GET", `/api/ventas/${id}`)).cuerpo?.datos?.saldo);
+  const saldoInicial = await saldoDe(idVV);
+  r = await como(tC, "POST", "/api/pagos", { id_venta: idVV, monto: 30000, metodo: "transferencia" });
+  comprobar("reportar sin comprobante ni referencia: 400", r.estado === 400 && !!r.cuerpo?.detalles?.comprobante);
+  r = await como(tC, "POST", "/api/pagos", {
+    id_venta: idVV, monto: 30000, metodo: "transferencia", referencia: "TRF-001",
+    comprobante: { base64: png1x1, tipo_mime: "image/png" }
+  });
+  comprobar("el Cliente reporta un pago con comprobante: 201 pendiente", r.estado === 201 && r.cuerpo?.datos?.pago?.estado === "pendiente", r.cuerpo);
+  const reporte1 = r.cuerpo?.datos?.pago;
+  comprobar("un pago reportado NO baja el saldo todavía", (await saldoDe(idVV)) === saldoInicial);
+  r = await como(tC, "POST", "/api/pagos", { id_venta: idVV, monto: saldoInicial - 30000 + 1, metodo: "nequi", referencia: "NQ" });
+  comprobar("no se reporta más que el saldo menos lo ya reportado (409)", r.estado === 409, r.cuerpo);
+  const { cuerpo: ajenas } = await pedir("GET", "/api/ventas?estado_pago=con_saldo&limit=100");
+  const ajena = ajenas?.datos?.find((v) => v.id_cliente !== idCliente);
+  if (ajena) {
+    r = await como(tC, "POST", "/api/pagos", { id_venta: ajena.id_venta, monto: 1000, metodo: "nequi", referencia: "NQ" });
+    comprobar("el Cliente no reporta pagos a ventas de otro cliente (404)", r.estado === 404, r.cuerpo);
+  }
+
+  const img = await fetch(`${BASE}/api/pagos/${reporte1?.id_pago}/comprobante`, { headers: { Authorization: `Bearer ${tC}` } });
+  comprobar("el Cliente ve su comprobante (image/png)", img.status === 200 && img.headers.get("content-type") === "image/png");
+  const imgSin = await fetch(`${BASE}/api/pagos/${reporte1?.id_pago}/comprobante`);
+  comprobar("el comprobante no es público (401 sin sesión)", imgSin.status === 401);
+  r = await como(tC, "PUT", `/api/pagos/${reporte1?.id_pago}/comprobante`, { base64: "AAAA", tipo_mime: "image/gif" });
+  comprobar("comprobante que no es imagen: 400", r.estado === 400);
+
+  r = await pedir("GET", "/api/dashboard/resumen");
+  comprobar("el Administrador ve cuántos pagos hay por aprobar", r.cuerpo?.datos?.pagos_por_aprobar >= 1, r.cuerpo?.datos);
+  r = await pedir("GET", "/api/pagos?estado=pendiente&limit=100");
+  comprobar("filtro de pagos por aprobar", r.cuerpo?.datos?.some((p) => p.id_pago === reporte1?.id_pago && p.tiene_comprobante === true));
+  r = await como(tV, "POST", `/api/pagos/${reporte1?.id_pago}/aprobar`, {});
+  comprobar("el Vendedor no aprueba pagos (403)", r.estado === 403);
+  r = await pedir("POST", `/api/pagos/${reporte1?.id_pago}/anular`, { motivo: "prueba" });
+  comprobar("un reporte no se anula: se aprueba o se rechaza (409)", r.estado === 409);
+  r = await pedir("POST", `/api/pagos/${reporte1?.id_pago}/aprobar`, {});
+  comprobar("el Administrador aprueba el pago", r.estado === 200 && r.cuerpo?.datos?.pago?.estado === "aplicado", r.cuerpo);
+  comprobar("al aprobarlo, el saldo baja", (await saldoDe(idVV)) === saldoInicial - 30000);
+  r = await pedir("POST", `/api/pagos/${reporte1?.id_pago}/aprobar`, {});
+  comprobar("aprobar dos veces: 409", r.estado === 409);
+
+  r = await como(tC, "POST", "/api/pagos", { id_venta: idVV, monto: 20000, metodo: "nequi", referencia: "NQ-777" });
+  const reporte2 = r.cuerpo?.datos?.pago;
+  r = await pedir("POST", `/api/pagos/${reporte2?.id_pago}/rechazar`, {});
+  comprobar("rechazar sin motivo: 400", r.estado === 400);
+  r = await pedir("POST", `/api/pagos/${reporte2?.id_pago}/rechazar`, { motivo: "No llegó la transferencia" });
+  comprobar("el Administrador rechaza un pago", r.estado === 200 && r.cuerpo?.datos?.pago?.estado === "rechazado");
+  comprobar("un pago rechazado no cuenta en el saldo", (await saldoDe(idVV)) === saldoInicial - 30000);
+  r = await como(tC, "PUT", `/api/pagos/${reporte2?.id_pago}/comprobante`, { base64: png1x1, tipo_mime: "image/png" });
+  comprobar("ya revisado, el Cliente no cambia el comprobante (409)", r.estado === 409);
+  r = await pedir("PUT", `/api/pagos/${abonoVendedor?.id_pago}/comprobante`, { base64: png1x1, tipo_mime: "image/png" });
+  comprobar("el equipo adjunta comprobante a un abono", r.estado === 200, r.cuerpo);
 
   // --- Resguardos de usuarios
   r = await pedir("GET", "/api/usuarios?rol=Administrador&status=active&limit=100");
@@ -400,7 +484,13 @@ async function main() {
   // ------------------------------------------------------------------
   titulo("Registro con aprobación y recuperación de contraseña");
   const correoReg = `registro${marca}@correo.com`;
-  const registroBase = { nombre: `Registro ${marca}`, correo: correoReg, telefono: "3105556677", ciudad: "La Pintada", password: "Registro123" };
+  const registroBase = {
+    nombre: `Registro Prueba ${marca}`, tipo_documento: "CC", documento: String(marca).slice(-9), telefono: "3105556677",
+    ciudad: "La Pintada", direccion: "Calle 5 # 4-3", correo: correoReg, password: "Registro123"
+  };
+  r = await pedir("POST", "/api/auth/registro", { ...registroBase, telefono: "310555", tipo_documento: "XX", acepta_datos: true }, { sinToken: true });
+  comprobar("registro con celular corto y tipo de documento inválido: 400",
+    r.estado === 400 && !!r.cuerpo?.detalles?.telefono && !!r.cuerpo?.detalles?.tipo_documento, r.cuerpo);
   r = await pedir("POST", "/api/auth/registro", registroBase, { sinToken: true });
   comprobar("registro sin aceptar tratamiento de datos: 400", r.estado === 400);
   r = await pedir("POST", "/api/auth/registro", { ...registroBase, acepta_datos: true }, { sinToken: true });
@@ -423,7 +513,7 @@ async function main() {
   comprobar("la cuenta aprobada ya entra y queda como Cliente", r.estado === 200 && r.cuerpo?.datos?.usuario?.rol === "Cliente");
   const idFichaReg = r.cuerpo?.datos?.usuario?.id_cliente;
   r = await pedir("GET", `/api/clientes/${idFichaReg}`);
-  comprobar("su ficha de cliente quedó activa", r.cuerpo?.datos?.estado === true);
+  comprobar("su ficha de cliente quedó activa y con sus datos", r.cuerpo?.datos?.estado === true && r.cuerpo?.datos?.tipo_documento === "CC" && r.cuerpo?.datos?.ciudad === "La Pintada");
 
   const correoRech = `rechazo${marca}@correo.com`;
   await pedir("POST", "/api/auth/registro", { ...registroBase, correo: correoRech, acepta_datos: true }, { sinToken: true });
@@ -520,7 +610,7 @@ async function main() {
   }
   r = await pedir("PUT", `/api/clientes/${idCliente}`, { estado: false });
   comprobar("cliente de prueba desactivado", r.estado === 200);
-  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  r = await pedir("POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "efectivo", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
   comprobar("no se le vende a un cliente inactivo (409)", r.estado === 409);
 
   console.log("\n====================================================");

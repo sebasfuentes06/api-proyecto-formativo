@@ -33,6 +33,7 @@ const cliente = {
   telefono: { etiqueta: "El teléfono", telefono: true },
   direccion: { etiqueta: "La dirección", texto: { max: 150 } },
   ciudad: { etiqueta: "La ciudad", texto: { max: 100 } },
+  tipo_documento: { etiqueta: "El tipo de documento", texto: { max: 5 } },
   documento: { etiqueta: "El documento", texto: { max: 20 } },
   notas: { etiqueta: "Las notas", texto: { max: 250 } },
   estado: { etiqueta: "El estado", booleano: true }

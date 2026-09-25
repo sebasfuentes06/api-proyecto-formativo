@@ -14,6 +14,7 @@ class Cliente {
     this.direccion,
     this.ciudad,
     this.documento,
+    this.tipoDocumento,
     this.notas,
     this.estado = true,
     this.fechaRegistro,
@@ -24,7 +25,7 @@ class Cliente {
 
   final int id;
   final String nombre;
-  final String? correo, telefono, direccion, ciudad, documento, notas;
+  final String? correo, telefono, direccion, ciudad, documento, tipoDocumento, notas;
   final bool estado;
   final DateTime? fechaRegistro, ultimaCompra;
   final int compras;
@@ -44,6 +45,7 @@ class Cliente {
         direccion: j['direccion'],
         ciudad: j['ciudad'],
         documento: j['documento'],
+        tipoDocumento: j['tipo_documento'],
         notas: j['notas'],
         estado: j['estado'] ?? true,
         fechaRegistro: aFecha(j['fecha_registro']),
@@ -173,10 +175,13 @@ class Pedido {
     this.numeroFactura,
     this.unidades = 0,
     this.items = const [],
+    this.metodoPago,
   });
 
   final int id;
   final String codigo;
+  /// Cómo va a pagar: wompi, transferencia, efectivo...
+  final String? metodoPago;
   final DateTime? fecha;
   final String canal, estado;
   final double total;
@@ -208,6 +213,7 @@ class Pedido {
         numeroFactura: j['numero_factura'],
         unidades: aInt(j['unidades']),
         items: ((j['items'] as List?) ?? []).map((e) => Linea.desdeJson(e as Json)).toList(),
+        metodoPago: j['metodo_pago'],
       );
 }
 
@@ -223,15 +229,26 @@ class Pago {
     this.fecha,
     this.numeroFactura,
     this.cliente,
+    this.clienteTelefono,
+    this.motivoRechazo,
+    this.tieneComprobante = false,
   });
 
   final int id, idVenta;
   final double monto;
   final String metodo, estado;
-  final String? referencia, nota, numeroFactura, cliente;
+  final String? referencia, nota, numeroFactura, cliente, clienteTelefono, motivoRechazo;
   final DateTime? fecha;
+  final bool tieneComprobante;
 
   bool get anulado => estado == 'anulado';
+  bool get aplicado => estado == 'aplicado';
+  /// Reportado por el cliente, esperando que el Administrador lo apruebe.
+  bool get porAprobar => estado == 'pendiente';
+  bool get rechazado => estado == 'rechazado';
+
+  /// La imagen exige sesión: se pide con la cabecera Authorization.
+  String get comprobanteUrl => '${Config.apiUrl}/api/pagos/$id/comprobante';
 
   factory Pago.desdeJson(Json j) => Pago(
         id: aInt(j['id_pago']),
@@ -244,6 +261,9 @@ class Pago {
         fecha: aFecha(j['fecha']),
         numeroFactura: j['numero_factura'],
         cliente: j['cliente'],
+        clienteTelefono: j['cliente_telefono'],
+        motivoRechazo: j['motivo_rechazo'],
+        tieneComprobante: j['tiene_comprobante'] == true,
       );
 }
 
@@ -292,10 +312,12 @@ class Venta {
     this.items = const [],
     this.pagos = const [],
     this.links = const [],
+    this.metodoPago,
   });
 
   final int id;
   final String numeroFactura;
+  final String? metodoPago;
   final DateTime? fecha;
   final String canal, estado, estadoPago;
   final double subtotal, descuento, total, pagado, saldo;
@@ -340,6 +362,7 @@ class Venta {
         items: ((j['items'] as List?) ?? []).map((e) => Linea.desdeJson(e as Json)).toList(),
         pagos: ((j['pagos'] as List?) ?? []).map((e) => Pago.desdeJson(e as Json)).toList(),
         links: ((j['wompi_links'] as List?) ?? []).map((e) => WompiLink.desdeJson(e as Json)).toList(),
+        metodoPago: j['metodo_pago'],
       );
 }
 

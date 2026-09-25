@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/api.dart';
+import '../../core/config.dart';
 import '../../core/formato.dart';
 import '../../models/modelos.dart';
 import '../../widgets/carrito.dart';
@@ -29,6 +30,12 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
   final _notas = TextEditingController();
   final _pago = DatosPago();
   bool _pagaAhora = true;
+
+  /// Cómo va a pagar el cliente esta venta (obligatorio).
+  String? _metodo;
+
+  /// Con Wompi el dinero entra por el link de pago, no se registra a mano.
+  bool get _esWompi => _metodo == 'wompi';
 
   double get _subtotal => _lineas.fold(0, (s, l) => s + l.subtotal);
   double get _total {
@@ -61,7 +68,16 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
     final r = await conCarga(context, () async {
       final p = await Api.i.pagina('/api/clientes', Cliente.desdeJson, query: {'search': 'Consumidor final', 'limit': 1});
       if (p.items.isNotEmpty) return p.items.first;
-      final creado = await Api.i.post('/api/clientes', {'nombre': 'Consumidor final', 'ciudad': 'La Pintada', 'notas': 'Ventas de mostrador sin datos del cliente'});
+      // "Consumidor final" con NIT 222222222222, como en la facturación
+      // colombiana; el celular es el de la tienda.
+      final creado = await Api.i.post('/api/clientes', {
+        'nombre': 'Consumidor final',
+        'tipo_documento': 'NIT',
+        'documento': '222222222222',
+        'telefono': Config.telefono.replaceAll(RegExp(r'[^0-9]'), ''),
+        'ciudad': 'La Pintada',
+        'notas': 'Ventas de mostrador sin datos del cliente',
+      });
       return Cliente.desdeJson(creado['datos']);
     }(), avisarCambio: false);
     if (r != null && mounted) setState(() => _cliente = r);
@@ -76,15 +92,19 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
       mostrarMensaje(context, 'Agrega al menos un producto.', error: true);
       return;
     }
-    if (!_form.currentState!.validate()) return;
+    if (!_form.currentState!.validate()) {
+      if (_metodo == null) mostrarMensaje(context, 'Elige el método de pago.', error: true);
+      return;
+    }
 
-    final pagoValido = _pagaAhora && (_pago.monto ?? 0) > 0;
+    final pagoValido = !_esWompi && _pagaAhora && (_pago.monto ?? 0) > 0;
     final ok = await confirmar(
       context,
       titulo: 'Confirmar venta',
       mensaje: 'Cliente: ${_cliente!.nombre}\n'
           'Total: ${dinero(_total)}\n'
-          '${pagoValido ? 'Paga ahora: ${dinero(_pago.monto!)} (${nombresMetodo[_pago.metodo]})' : 'Queda a crédito'}\n\n'
+          'Método de pago: ${nombresMetodo[_metodo]}\n'
+          '${pagoValido ? 'Paga ahora: ${dinero(_pago.monto!)} (${nombresMetodo[_pago.metodo]})' : _esWompi ? 'Se paga con link de Wompi (lo envías en el siguiente paso)' : 'Queda a crédito'}\n\n'
           'Se descontará el stock y se generará la factura.',
       textoOk: 'Registrar venta',
     );
@@ -95,6 +115,7 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
       Api.i.post('/api/ventas', {
         'id_cliente': _cliente!.id,
         'canal': _canal,
+        'metodo_pago': _metodo,
         'items': _lineas.map((l) => l.aJson()).toList(),
         'descuento': leerDinero(_descuento.text) ?? 0,
         'notas': _notas.text.trim(),
@@ -181,18 +202,35 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
               FilaValor('Total', dinero(_total), destacado: true),
             ]),
           ),
-          const TituloSeccion('Pago'),
-          SwitchListTile(
-            title: const Text('El cliente paga ahora'),
-            subtitle: Text(_pagaAhora ? 'Pago total o abono inicial' : 'La venta queda a crédito (se abona después)'),
-            value: _pagaAhora,
-            onChanged: (v) => setState(() => _pagaAhora = v),
-          ),
-          if (_pagaAhora && _total > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: CamposPago(key: ValueKey(_total), datos: _pago, maximo: _total, obligatorio: false),
+          const TituloSeccion('Método de pago *'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SelectorMetodo(
+              valor: _metodo,
+              onCambio: (m) => setState(() {
+                _metodo = m;
+                if (m != 'wompi') _pago.metodo = m;
+              }),
             ),
+          ),
+          if (_esWompi)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text('Al registrar la venta podrás crear el link de Wompi y enviárselo al cliente por WhatsApp.'),
+            )
+          else if (_metodo != null) ...[
+            SwitchListTile(
+              title: const Text('El cliente paga ahora'),
+              subtitle: Text(_pagaAhora ? 'Pago total o abono inicial' : 'La venta queda a crédito (se abona después)'),
+              value: _pagaAhora,
+              onChanged: (v) => setState(() => _pagaAhora = v),
+            ),
+            if (_pagaAhora && _total > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: CamposPago(key: ValueKey('$_total|$_metodo'), datos: _pago, maximo: _total, obligatorio: false),
+              ),
+          ],
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: TextField(controller: _notas, maxLength: 250, decoration: const InputDecoration(labelText: 'Notas (opcional)')),

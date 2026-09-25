@@ -77,6 +77,7 @@ Future<Uint8List> generarFactura(Venta v) async {
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
           pw.Text('Fecha: ${fechaHora(v.fecha)}'),
           pw.Text('Canal: ${nombresCanal[v.canal] ?? v.canal}'),
+          if (v.metodoPago != null) pw.Text('Forma de pago: ${nombresMetodo[v.metodoPago] ?? v.metodoPago}'),
           if (v.pedidoCodigo != null) pw.Text('Pedido: ${v.pedidoCodigo}'),
           if (v.vendedor != null) pw.Text('Atendió: ${v.vendedor}'),
         ]),
@@ -107,11 +108,11 @@ Future<Uint8List> generarFactura(Venta v) async {
         _fila('Pagado', dinero(v.pagado), color: PdfColors.green800),
         _fila('Saldo pendiente', dinero(v.saldo > 0 ? v.saldo : 0), negrita: true, color: v.saldo > 0 ? PdfColors.red800 : PdfColors.green800),
       ],
-      if (v.pagos.where((p) => !p.anulado).isNotEmpty) ...[
+      if (v.pagos.where((p) => p.aplicado).isNotEmpty) ...[
         pw.SizedBox(height: 16),
         pw.Text('PAGOS RECIBIDOS', style: pw.TextStyle(fontSize: 9, color: _marca, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 4),
-        for (final p in v.pagos.where((p) => !p.anulado))
+        for (final p in v.pagos.where((p) => p.aplicado))
           pw.Text('${fechaHora(p.fecha)}  ·  ${nombresMetodo[p.metodo] ?? p.metodo}  ·  ${dinero(p.monto)}'
               '${p.referencia != null ? '  ·  Ref. ${p.referencia}' : ''}'),
       ],

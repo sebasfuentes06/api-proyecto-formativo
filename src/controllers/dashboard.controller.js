@@ -15,7 +15,7 @@ const resumen = asyncHandler(async (req, res) => {
   const valores = soloMio ? [req.usuario.id] : [];
   const deV = soloMio ? "AND v.id_usuario = $1" : "";
 
-  const [ventas, cartera, pedidos, stock, top, solicitudes] = await Promise.all([
+  const [ventas, cartera, pedidos, stock, top, solicitudes, porAprobar] = await Promise.all([
     query(
       `SELECT
          COALESCE(SUM(total) FILTER (WHERE fecha_local(fecha)::DATE = hoy_local()), 0) AS hoy,
@@ -43,7 +43,11 @@ const resumen = asyncHandler(async (req, res) => {
     // Solicitudes de registro esperando aprobación (solo le importan al Administrador).
     soloMio
       ? Promise.resolve({ rows: [{ n: 0 }] })
-      : query("SELECT COUNT(*)::INT AS n FROM usuarios WHERE aprobacion = 'pendiente'")
+      : query("SELECT COUNT(*)::INT AS n FROM usuarios WHERE aprobacion = 'pendiente'"),
+    // Pagos que reportaron los clientes y esperan que el Administrador los apruebe.
+    soloMio
+      ? Promise.resolve({ rows: [{ n: 0, monto: 0 }] })
+      : query("SELECT COUNT(*)::INT AS n, COALESCE(SUM(monto), 0) AS monto FROM pagos WHERE estado = 'pendiente'")
   ]);
   res.json({
     ok: true,
@@ -58,7 +62,9 @@ const resumen = asyncHandler(async (req, res) => {
       pedidos_pendientes: pedidos.rows[0].pendientes,
       stock_bajo: stock.rows[0].bajo,
       mas_vendidos: top.rows,
-      solicitudes_pendientes: solicitudes.rows[0].n
+      solicitudes_pendientes: solicitudes.rows[0].n,
+      pagos_por_aprobar: porAprobar.rows[0].n,
+      monto_por_aprobar: porAprobar.rows[0].monto
     }
   });
 });

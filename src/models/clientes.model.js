@@ -70,10 +70,10 @@ async function obtenerPorId(id) {
   return rows[0] ?? null;
 }
 
-async function crear({ nombre, correo, telefono, direccion, ciudad, documento, notas, estado = true }) {
+async function crear({ nombre, correo, telefono, direccion, ciudad, documento, notas, estado = true, tipo_documento }) {
   const { rows } = await query(
-    `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, estado, documento, notas)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, estado, documento, notas, tipo_documento)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id_cliente`,
     [
       nombre.trim(),
@@ -86,13 +86,14 @@ async function crear({ nombre, correo, telefono, direccion, ciudad, documento, n
       ciudad?.trim() || null,
       estado,
       documento?.trim() || null,
-      notas?.trim() || null
+      notas?.trim() || null,
+      tipo_documento?.trim().toUpperCase() || null
     ]
   );
   return obtenerPorId(rows[0].id_cliente);
 }
 
-async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, estado, documento, notas }) {
+async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, estado, documento, notas, tipo_documento }) {
   const { rowCount } = await query(
     `UPDATE clientes
         SET nombre    = COALESCE($2, nombre),
@@ -102,7 +103,8 @@ async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, est
             ciudad    = COALESCE($6, ciudad),
             estado    = COALESCE($7, estado),
             documento = COALESCE($8, documento),
-            notas     = COALESCE($9, notas)
+            notas     = COALESCE($9, notas),
+            tipo_documento = COALESCE($10, tipo_documento)
       WHERE id_cliente = $1`,
     [
       id,
@@ -113,7 +115,8 @@ async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, est
       ciudad?.trim() ?? null,
       estado ?? null,
       documento?.trim() ?? null,
-      notas?.trim() ?? null
+      notas?.trim() ?? null,
+      tipo_documento?.trim().toUpperCase() ?? null
     ]
   );
   return rowCount ? obtenerPorId(id) : null;

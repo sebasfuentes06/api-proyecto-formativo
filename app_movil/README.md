@@ -12,6 +12,11 @@ que a su vez usa la base PostgreSQL de Neon.
 | **Ventas** | Subproceso de ventas | Resumen del día y del mes; nueva venta (contado o crédito, descuento, precio especial); historial con filtros y rango de fechas; **factura PDF** (compartir o imprimir); anular venta |
 | **Pagos** | Subproceso de pagos y abonos | Pagos totales o abonos (efectivo, transferencia, Nequi, Daviplata, tarjeta); **link de pago Wompi**; cartera por cliente; **reporte PDF de pagos pendientes**; recordatorio por WhatsApp; anular pagos |
 
+## Antes del login: vitrina de productos
+
+Quien abre la app sin sesión ve el catálogo real (fotos, precios, categorías y
+buscador). Para pedir tiene que **registrarse** o **iniciar sesión**.
+
 ## Roles
 
 | | Administrador | Vendedor | Cliente |
@@ -31,8 +36,12 @@ permiso: ocultar un botón en la app es comodidad, no la única protección.
 
 ## Registro y recuperación de contraseña
 
-- **Regístrate** (en el login): nombre, documento, celular, dirección, ciudad,
-  correo, contraseña y aceptación de datos personales. La cuenta queda
+- **Regístrate** (en la vitrina o en el login), en este orden: nombre completo,
+  tipo de documento, documento, celular (solo números), **municipio de
+  Antioquia** (lista que se consume de la API pública
+  [API Colombia](https://api-colombia.com); si no hay internet usa una lista
+  guardada), dirección, correo y contraseña. El formulario de *Nuevo cliente*
+  usa exactamente los mismos campos. La cuenta queda
   **pendiente**; al administrador le llega un correo y un aviso en la pestaña
   Ventas. La aprueba (eligiendo el rol) o la rechaza en **avatar ▸ Usuarios y
   roles ▸ Pendientes**, y a la persona le llega el correo con la respuesta.
@@ -88,7 +97,7 @@ flutter build apk --release
 
 ```
 lib/
-  main.dart                  arranque, tema y login/app según la sesión
+  main.dart                  arranque, tema y vitrina/app según la sesión
   core/
     api.dart                 cliente HTTP: token, errores, paginación
     sesion.dart              login, token guardado, cerrar sesión
@@ -102,9 +111,30 @@ lib/
     carrito.dart             editor de productos y campos de pago
     selectores.dart          elegir cliente / producto
     perfil.dart              cuenta, contraseña, estado de Wompi, salir
+    campos_persona.dart      campos del registro y del cliente; municipios (API Colombia)
+    buscador_imagenes.dart   buscar fotos en la API de Wikimedia Commons
   pdf/documentos_pdf.dart    factura, estado de cuenta, reporte de pendientes
   screens/                   una carpeta por pestaña
 ```
+
+## Pagos del cliente, comprobantes y método de pago
+
+- **Nueva venta**: el método de pago es obligatorio (efectivo, transferencia,
+  Nequi, Daviplata, tarjeta o Wompi). Sale en el detalle y en la factura PDF.
+- **Pedido del cliente**: escoge cómo va a pagar — Wompi, transferencia o
+  efectivo en el punto físico. Al convertirlo en venta se conserva.
+- **Reportar pago** (cliente): en una compra con saldo, el cliente escribe el
+  monto, la referencia y adjunta la foto del comprobante. Queda *Por aprobar*.
+- **Aprobar** (administrador): Pagos ▸ *Por aprobar* (o el aviso en Ventas) ▸
+  toca el pago ▸ ve el comprobante ▸ Aprobar / Rechazar. El cliente recibe un
+  correo con la respuesta.
+- El equipo también puede adjuntar el comprobante a cualquier abono.
+
+## Fotos del catálogo desde internet
+
+Detalle del producto ▸ *Agregar foto* ▸ **Buscar imagen en internet**: la app
+consulta la API de **Wikimedia Commons** (fotos de licencia libre), se elige una
+y queda guardada en la base, así la ven todos (y la vitrina).
 
 ## Pagos con Wompi (modo pruebas)
 

@@ -7,7 +7,7 @@ import { paginacion } from "../utils/consulta.js";
  */
 
 const SELECT_LISTA = `
-  SELECT v.id_venta, v.numero_factura, v.fecha, v.canal, v.estado,
+  SELECT v.id_venta, v.numero_factura, v.fecha, v.canal, v.estado, v.metodo_pago,
          v.subtotal, v.descuento, v.total,
          s.pagado, s.saldo, s.estado_pago,
          v.id_cliente, c.nombre AS cliente, c.telefono AS cliente_telefono,
@@ -93,7 +93,11 @@ async function obtenerPorId(id) {
         WHERE d.id_venta = $1 ORDER BY d.id_detalle`,
       [id]
     ),
-    query("SELECT * FROM pagos WHERE id_venta = $1 ORDER BY fecha, id_pago", [id]),
+    query(
+      `SELECT p.*, EXISTS (SELECT 1 FROM pago_comprobante pc WHERE pc.id_pago = p.id_pago) AS tiene_comprobante
+         FROM pagos p WHERE p.id_venta = $1 ORDER BY p.fecha, p.id_pago`,
+      [id]
+    ),
     query("SELECT * FROM wompi_links WHERE id_venta = $1 ORDER BY creado_en DESC", [id])
   ]);
 

@@ -67,7 +67,8 @@ const estadoCuenta = asyncHandler(async (req, res) => {
     [cliente.id_cliente]
   );
   const { rows: pagos } = await query(
-    `SELECT p.id_pago, p.fecha, p.monto, p.metodo, p.referencia, p.estado, v.numero_factura, v.id_venta
+    `SELECT p.id_pago, p.fecha, p.monto, p.metodo, p.referencia, p.estado, p.motivo_rechazo, v.numero_factura, v.id_venta,
+            EXISTS (SELECT 1 FROM pago_comprobante pc WHERE pc.id_pago = p.id_pago) AS tiene_comprobante
        FROM pagos p JOIN ventas v ON v.id_venta = p.id_venta
       WHERE v.id_cliente = $1
       ORDER BY p.fecha DESC LIMIT 50`,

@@ -1,5 +1,6 @@
 import { query } from "../db/pool.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
+import { leerImagenBase64 } from "../utils/imagen.js";
 
 /**
  * Fotos de los productos (catálogo de la app).
@@ -8,9 +9,6 @@ import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
  * en PostgreSQL como bytes (BYTEA) y se sirve como imagen normal, así que la
  * misma URL sirve para mostrarla en la app o mandarla por WhatsApp.
  */
-
-const TIPOS = ["image/jpeg", "image/png", "image/webp"];
-const MAXIMO_BYTES = 1.5 * 1024 * 1024;
 
 /** GET /api/productos/:id/imagen — público, para que funcione en un <img>. */
 const obtener = asyncHandler(async (req, res) => {
@@ -27,13 +25,7 @@ const obtener = asyncHandler(async (req, res) => {
 
 /** PUT /api/productos/:id/imagen  { base64, tipo_mime } */
 const guardar = asyncHandler(async (req, res) => {
-  const tipo = req.body.tipo_mime ?? "image/jpeg";
-  if (!TIPOS.includes(tipo)) throw new ErrorHttp(400, "Formato no permitido. Usa JPG, PNG o WEBP.");
-  const texto = String(req.body.base64 ?? "").replace(/^data:[^;]+;base64,/, "");
-  if (!texto) throw new ErrorHttp(400, "No llegó ninguna imagen.");
-  const bytes = Buffer.from(texto, "base64");
-  if (bytes.length === 0) throw new ErrorHttp(400, "La imagen está vacía o dañada.");
-  if (bytes.length > MAXIMO_BYTES) throw new ErrorHttp(413, "La imagen pesa demasiado (máximo 1,5 MB).");
+  const { bytes, tipo } = leerImagenBase64(req.body);
 
   const { rows: p } = await query("SELECT 1 FROM productos WHERE id_producto = $1", [req.idNumerico]);
   if (!p[0]) throw new ErrorHttp(404, "No existe un producto con ese id.");

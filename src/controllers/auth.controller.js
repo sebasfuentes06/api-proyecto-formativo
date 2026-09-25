@@ -5,6 +5,7 @@ import { env } from "../config/env.js";
 import { query, transaccion } from "../db/pool.js";
 import { correos, correoConfigurado, bandejaPrueba } from "../services/correo.service.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
+import { validarPersona, PATRON_CORREO } from "../validaciones/persona.js";
 
 /**
  * Autenticación de la app móvil.
@@ -77,12 +78,10 @@ const cambiarPassword = asyncHandler(async (req, res) => {
 // Registro (queda pendiente hasta que el Administrador lo apruebe)
 // ---------------------------------------------------------------------------
 
-const PATRON_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PATRON_TELEFONO = /^[+()\d\s-]{7,20}$/;
-
 /**
  * POST /api/auth/registro
- * { nombre, correo, telefono, direccion?, ciudad?, documento?, password, acepta_datos }
+ * { nombre, tipo_documento, documento, telefono (celular), ciudad (municipio
+ *   de Antioquia), direccion?, correo, password, acepta_datos }
  *
  * Crea la cuenta como Cliente PENDIENTE y su ficha de cliente (inactiva hasta
  * la aprobación). Si ya existe una ficha con ese correo y sin cuenta, se usa
@@ -90,19 +89,8 @@ const PATRON_TELEFONO = /^[+()\d\s-]{7,20}$/;
  */
 const registro = asyncHandler(async (req, res) => {
   const b = req.body ?? {};
-  const datos = {
-    nombre: String(b.nombre ?? "").trim(),
-    correo: String(b.correo ?? "").trim().toLowerCase(),
-    telefono: String(b.telefono ?? "").trim(),
-    direccion: String(b.direccion ?? "").trim() || null,
-    ciudad: String(b.ciudad ?? "").trim() || null,
-    documento: String(b.documento ?? "").trim() || null,
-    password: String(b.password ?? "")
-  };
-  const errores = {};
-  if (datos.nombre.length < 3 || datos.nombre.length > 100) errores.nombre = "Escribe tu nombre completo.";
-  if (!PATRON_CORREO.test(datos.correo) || datos.correo.length > 100) errores.correo = "Correo no válido.";
-  if (!PATRON_TELEFONO.test(datos.telefono)) errores.telefono = "Teléfono no válido.";
+  const { datos: persona, errores } = validarPersona(b, { correoObligatorio: true });
+  const datos = { ...persona, direccion: persona.direccion || null, password: String(b.password ?? "") };
   if (datos.password.length < 8) errores.password = "La contraseña debe tener al menos 8 caracteres.";
   if (b.acepta_datos !== true) errores.acepta_datos = "Debes aceptar el tratamiento de datos personales.";
   if (Object.keys(errores).length) throw new ErrorHttp(400, "Revisa los datos del registro.", errores);
@@ -124,12 +112,20 @@ const registro = asyncHandler(async (req, res) => {
       [datos.correo]
     );
     let idCliente = ficha[0]?.id_cliente;
-    if (!idCliente) {
+    if (idCliente) {
+      // Completa la ficha que ya existía con lo que la persona acaba de escribir.
+      await db.query(
+        `UPDATE clientes SET tipo_documento = $2, documento = $3, telefono = $4, ciudad = $5,
+                direccion = COALESCE($6, direccion)
+          WHERE id_cliente = $1`,
+        [idCliente, datos.tipo_documento, datos.documento, datos.telefono, datos.ciudad, datos.direccion]
+      );
+    } else {
       const { rows } = await db.query(
-        `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, documento, estado, notas)
-         VALUES ($1, $2, $3, $4, $5, $6, FALSE, 'Registrado desde la app (pendiente de aprobación)')
+        `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, tipo_documento, documento, estado, notas)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, 'Registrado desde la app (pendiente de aprobación)')
          RETURNING id_cliente`,
-        [datos.nombre, datos.correo, datos.telefono, datos.direccion, datos.ciudad, datos.documento]
+        [datos.nombre, datos.correo, datos.telefono, datos.direccion, datos.ciudad, datos.tipo_documento, datos.documento]
       );
       idCliente = rows[0].id_cliente;
     }

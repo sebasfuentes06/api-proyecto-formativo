@@ -39,7 +39,7 @@ const pathsMovil = {
     post: {
       tags: ["Sesión"], summary: "Registrarse (queda pendiente de aprobación)",
       description: "Crea la cuenta como Cliente pendiente y su ficha de cliente inactiva. Avisa por correo al usuario y a los administradores. No puede entrar hasta que el Administrador la apruebe.",
-      requestBody: cuerpo({ nombre: "Ana Gómez", correo: "ana@correo.com", telefono: "3001234567", direccion: "Calle 5 # 3-10", ciudad: "La Pintada", password: "MiClave2026", acepta_datos: true }),
+      requestBody: cuerpo({ nombre: "Ana Gómez", tipo_documento: "CC", documento: "1037654321", telefono: "3001234567", ciudad: "La Pintada", direccion: "Calle 5 # 3-10", correo: "ana@correo.com", password: "MiClave2026", acepta_datos: true }),
       responses: { 201: ok("Solicitud enviada"), 400: errores[400], 409: { description: "Ya existe una cuenta o solicitud con ese correo" } }
     }
   },
@@ -67,12 +67,13 @@ const pathsMovil = {
   "/api/pedidos": {
     get: {
       tags: ["Pedidos"], summary: "Listar pedidos", security: SESION,
-      parameters: [q("search", "Código o cliente"), q("estado", "pendiente | confirmado | cancelado"), q("canal", "whatsapp | punto_fisico"), q("id_cliente", "Filtrar por cliente", { type: "integer" }), q("page", "Página", { type: "integer" }), q("limit", "Por página", { type: "integer" })],
+      parameters: [q("search", "Código o cliente"), q("estado", "pendiente | confirmado | cancelado"), q("canal", "whatsapp | punto_fisico | app"), q("id_cliente", "Filtrar por cliente", { type: "integer" }), q("page", "Página", { type: "integer" }), q("limit", "Por página", { type: "integer" })],
       responses: { 200: ok("Listado paginado") }
     },
     post: {
       tags: ["Pedidos"], summary: "Registrar pedido", security: SESION,
-      requestBody: cuerpo({ id_cliente: 1, canal: "whatsapp", direccion_entrega: "Vereda La Loma", notas: "Envolver para regalo", items: ITEMS }),
+      description: "metodo_pago: cómo va a pagar. Para el rol Cliente es obligatorio y solo puede ser wompi, transferencia o efectivo (en el punto físico).",
+      requestBody: cuerpo({ id_cliente: 1, canal: "whatsapp", metodo_pago: "transferencia", direccion_entrega: "Vereda La Loma", notas: "Envolver para regalo", items: ITEMS }),
       responses: { 201: ok("Pedido creado"), ...errores }
     }
   },
@@ -84,7 +85,7 @@ const pathsMovil = {
   "/api/pedidos/{id}/convertir": {
     post: {
       tags: ["Pedidos"], summary: "Convertir pedido en venta confirmada", security: SESION, parameters: [ID],
-      description: "En una sola transacción: crea la venta con su factura, descuenta el stock y marca el pedido como confirmado. Si un producto se agotó, no se guarda nada.",
+      description: "En una sola transacción: crea la venta con su factura, descuenta el stock y marca el pedido como confirmado. Si un producto se agotó, no se guarda nada. La venta hereda el metodo_pago del pedido si no se manda otro.",
       requestBody: cuerpo({ descuento: 10000, pago_inicial: { monto: 100000, metodo: "nequi", referencia: "M123456" } }),
       responses: { 201: ok("Venta creada"), ...errores }
     }
@@ -98,8 +99,8 @@ const pathsMovil = {
     },
     post: {
       tags: ["Ventas"], summary: "Registrar venta (factura automática)", security: SESION,
-      description: "Bloquea las filas de los productos (SELECT ... FOR UPDATE) para que dos ventas simultáneas no vendan la misma unidad.",
-      requestBody: cuerpo({ id_cliente: 1, canal: "punto_fisico", items: ITEMS, descuento: 0, pago_inicial: { monto: 50000, metodo: "efectivo" } }),
+      description: "metodo_pago es obligatorio (efectivo, transferencia, nequi, daviplata, tarjeta o wompi); el pago inicial lo usa si no trae el suyo. Bloquea las filas de los productos (SELECT ... FOR UPDATE) para que dos ventas simultáneas no vendan la misma unidad.",
+      requestBody: cuerpo({ id_cliente: 1, canal: "punto_fisico", metodo_pago: "efectivo", items: ITEMS, descuento: 0, pago_inicial: { monto: 50000 } }),
       responses: { 201: ok("Venta creada"), ...errores }
     }
   },
@@ -109,10 +110,22 @@ const pathsMovil = {
   "/api/pagos": {
     get: {
       tags: ["Pagos"], summary: "Listar pagos", security: SESION,
-      parameters: [q("id_venta", "Venta", { type: "integer" }), q("id_cliente", "Cliente", { type: "integer" }), q("metodo", "efectivo | transferencia | nequi | daviplata | tarjeta | wompi"), q("estado", "aplicado | anulado"), q("desde", "YYYY-MM-DD"), q("hasta", "YYYY-MM-DD")],
+      parameters: [q("id_venta", "Venta", { type: "integer" }), q("id_cliente", "Cliente", { type: "integer" }), q("metodo", "efectivo | transferencia | nequi | daviplata | tarjeta | wompi"), q("estado", "aplicado | anulado | pendiente (por aprobar) | rechazado"), q("desde", "YYYY-MM-DD"), q("hasta", "YYYY-MM-DD")],
       responses: { 200: ok("Listado con total recaudado") }
     },
-    post: { tags: ["Pagos"], summary: "Registrar pago o abono", security: SESION, requestBody: cuerpo({ id_venta: 1, monto: 50000, metodo: "transferencia", referencia: "TR-889" }), responses: { 201: ok("Pago registrado y nuevo saldo"), ...errores } }
+    post: {
+      tags: ["Pagos"], summary: "Registrar pago o abono (equipo) / reportar un pago (Cliente)", security: SESION,
+      description: "Administrador y Vendedor: el pago queda aplicado. Cliente: queda 'pendiente' hasta que el Administrador lo apruebe; solo transferencia, Nequi o Daviplata, y exige comprobante o referencia. comprobante es opcional: { base64, tipo_mime } (JPG, PNG o WEBP, máx. 1,5 MB).",
+      requestBody: cuerpo({ id_venta: 1, monto: 50000, metodo: "transferencia", referencia: "TR-889", comprobante: { base64: "iVBORw0KGgo...", tipo_mime: "image/png" } }),
+      responses: { 201: ok("Pago registrado (o reportado) y saldo"), ...errores }
+    }
+  },
+  "/api/pagos/datos-pago": { get: { tags: ["Pagos"], summary: "Datos para pagar: cuenta de transferencia, punto físico y si hay Wompi", security: SESION, responses: { 200: ok("Datos de pago") } } },
+  "/api/pagos/{id}/aprobar": { post: { tags: ["Pagos"], summary: "Aprobar un pago reportado por un cliente (Administrador)", security: SESION, parameters: [ID], responses: { 200: ok("Aplicado y nuevo saldo"), ...errores } } },
+  "/api/pagos/{id}/rechazar": { post: { tags: ["Pagos"], summary: "Rechazar un pago reportado (Administrador)", security: SESION, parameters: [ID], requestBody: cuerpo({ motivo: "No llegó la transferencia" }), responses: { 200: ok("Rechazado"), ...errores } } },
+  "/api/pagos/{id}/comprobante": {
+    get: { tags: ["Pagos"], summary: "Imagen del comprobante (requiere sesión; el Cliente solo los suyos)", security: SESION, parameters: [ID], responses: { 200: { description: "Imagen", content: { "image/jpeg": {}, "image/png": {}, "image/webp": {} } }, 404: errores[404] } },
+    put: { tags: ["Pagos"], summary: "Subir o cambiar el comprobante", security: SESION, parameters: [ID], requestBody: cuerpo({ base64: "iVBORw0KGgo...", tipo_mime: "image/png" }), responses: { 200: ok("Guardado"), ...errores } }
   },
   "/api/pagos/{id}/anular": { post: { tags: ["Pagos"], summary: "Anular un pago", security: SESION, parameters: [ID], requestBody: cuerpo({ motivo: "Transferencia devuelta" }), responses: { 200: ok("Anulado"), ...errores } } },
   "/api/pagos/pendientes": { get: { tags: ["Pagos"], summary: "Reporte de pagos pendientes (cartera por cliente)", security: SESION, responses: { 200: ok("Cartera") } } },

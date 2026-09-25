@@ -8,6 +8,7 @@ import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
+import '../pagos/pago_detalle.dart';
 import '../pedidos/pedido_form_screen.dart';
 import '../ventas/venta_detalle_screen.dart';
 import '../ventas/venta_form_screen.dart';
@@ -220,7 +221,7 @@ class _ClienteDetalleScreenState extends State<ClienteDetalleScreen> {
       dato(Icons.phone_outlined, 'Teléfono', c.telefono),
       dato(Icons.home_outlined, 'Dirección', [c.direccion, c.ciudad].whereType<String>().where((s) => s.isNotEmpty).join(', ')),
       dato(Icons.mail_outline, 'Correo', c.correo),
-      dato(Icons.badge_outlined, 'Documento', c.documento),
+      dato(Icons.badge_outlined, 'Documento', c.documento == null ? null : '${c.tipoDocumento ?? ''} ${c.documento}'.trim()),
       if (c.notas != null && c.notas!.isNotEmpty) dato(Icons.notes, 'Notas', c.notas),
       const TituloSeccion('Resumen'),
       dato(Icons.shopping_bag_outlined, 'Compras confirmadas', '${res['compras']}'),
@@ -306,14 +307,7 @@ class _ClienteDetalleScreenState extends State<ClienteDetalleScreen> {
       ],
       const TituloSeccion('Últimos pagos'),
       if (pagos.isEmpty) const ListTile(title: Text('Sin pagos registrados')),
-      for (final p in pagos)
-        ListTile(
-          leading: Icon(p.anulado ? Icons.block : Icons.payments_outlined, color: p.anulado ? gris : verde),
-          title: Text('${dinero(p.monto)} · ${nombresMetodo[p.metodo] ?? p.metodo}',
-              style: TextStyle(decoration: p.anulado ? TextDecoration.lineThrough : null)),
-          subtitle: Text('${p.numeroFactura ?? ''} · ${fechaHora(p.fecha)}'),
-          trailing: p.anulado ? const Etiqueta('Anulado', color: gris) : null,
-        ),
+      for (final p in pagos) FilaPago(pago: p),
     ]);
   }
 }

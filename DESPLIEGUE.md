@@ -243,6 +243,29 @@ administradora puede restablecer claves desde Usuarios) y los avisos no salen.
 
 ---
 
+## Parte 8 — Pagos que reporta el cliente y datos para transferir
+
+1. Corre otra vez `npm run db:movil` (agrega `tipo_documento`, `metodo_pago`,
+   los estados *pendiente/rechazado* de los pagos y la tabla de comprobantes).
+   No borra nada.
+2. En Vercel ▸ Settings ▸ Environment Variables agrega (opcionales):
+
+   | Variable | Ejemplo |
+   |---|---|
+   | `PAGO_TRANSFERENCIA_INFO` | `Nequi 300 000 0000 a nombre de Yésica ...` |
+   | `PUNTO_FISICO_DIRECCION` | `Avenida 30 # 31-16, La Pintada, Antioquia` |
+
+   Sin `PAGO_TRANSFERENCIA_INFO` la app le dice al cliente que pida los datos
+   por WhatsApp.
+3. Redeploy.
+
+Flujo: el cliente entra a una compra con saldo ▸ **Reportar pago** ▸ monto,
+método, referencia y foto del comprobante. A los administradores les llega un
+correo y el aviso "pagos por aprobar" en Ventas y en Pagos ▸ *Por aprobar*.
+Al aprobar, el saldo baja y al cliente le llega el correo de confirmación.
+
+---
+
 ## Antes de la sustentación
 
 **La primera petición es lenta.** Son dos esperas que se suman: Vercel apaga la

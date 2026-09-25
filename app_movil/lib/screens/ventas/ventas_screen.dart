@@ -7,6 +7,7 @@ import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
+import '../pagos/pago_detalle.dart';
 import '../usuarios/usuarios_screen.dart';
 import 'venta_detalle_screen.dart';
 import 'venta_form_screen.dart';
@@ -165,6 +166,7 @@ class _VentasScreenState extends State<VentasScreen> {
         );
 
     final solicitudes = aInt(r?['solicitudes_pendientes']);
+    final porAprobar = aInt(r?['pagos_por_aprobar']);
     return Column(children: [
       // Aviso para el Administrador: gente que se registró y espera aprobación.
       if (Sesion.i.esAdmin && solicitudes > 0)
@@ -176,6 +178,18 @@ class _VentasScreenState extends State<VentasScreen> {
             subtitle: const Text('Toca para aprobar o rechazar'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UsuariosScreen(soloPendientes: true))),
+          ),
+        ),
+      // Pagos que reportaron los clientes (transferencias con comprobante).
+      if (Sesion.i.esAdmin && porAprobar > 0)
+        Card(
+          color: const Color(0xFFFFF3E0),
+          child: ListTile(
+            leading: const Icon(Icons.receipt_long, color: ambar),
+            title: Text('$porAprobar pago${porAprobar == 1 ? '' : 's'} por aprobar'),
+            subtitle: Text('${dinero(aNum(r?['monto_por_aprobar']))} reportados por clientes · toca para revisar'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PagosPorAprobarScreen())),
           ),
         ),
       if (r != null)

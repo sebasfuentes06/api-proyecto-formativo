@@ -142,7 +142,7 @@ async function main() {
     0
   );
   // 21 del CRUD base + 27 del proceso de ventas + 6 de usuarios + 3 de registro/recuperación.
-  comprobar("describe las 57 operaciones", operaciones === 57, `describe ${operaciones}`);
+  comprobar("describe las 62 operaciones", operaciones === 62, `describe ${operaciones}`);
   comprobar(
     "el servidor de la spec apunta a esta API",
     spec.cuerpo?.servers?.[0]?.url === BASE,

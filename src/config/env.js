@@ -88,6 +88,16 @@ const env = {
     remitente: process.env.CORREO_REMITENTE ?? process.env.CORREO_USUARIO ?? null,
     modoPrueba: process.env.CORREO_MODO === "prueba" && !process.env.VERCEL
   },
+  /**
+   * Datos que la app le muestra al cliente para pagar. Se cambian en Vercel
+   * sin publicar otra versión de la app.
+   *   PAGO_TRANSFERENCIA_INFO  ej. "Nequi 300 123 4567 a nombre de Yésica ..."
+   *   PUNTO_FISICO_DIRECCION   ej. "Cra 30 # 29-15, La Pintada (Antioquia)"
+   */
+  pagos: {
+    transferencia: process.env.PAGO_TRANSFERENCIA_INFO?.trim() || null,
+    puntoFisico: process.env.PUNTO_FISICO_DIRECCION?.trim() || "Punto físico en La Pintada, Antioquia"
+  },
   db: {
     connectionString: databaseUrl,
     ssl: resolverSsl(),

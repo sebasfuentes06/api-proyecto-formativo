@@ -134,7 +134,54 @@ const correos = {
       texto: `Hola ${nombre}. Tu solicitud no fue aprobada. Motivo: ${motivo}. Si crees que es un error, escríbenos por WhatsApp.`,
       cuerpo: `<p>Hola ${esc(nombre)},</p><p>Tu solicitud de cuenta no fue aprobada.</p><p><b>Motivo:</b> ${esc(motivo)}</p>
         <p>Si crees que es un error, escríbenos por WhatsApp.</p>`
+    }),
+
+  // --- Pagos reportados por el cliente ------------------------------
+  pagoReportado: (para, { cliente, factura, monto, metodo, referencia }) =>
+    enviarSinFallar({
+      para,
+      asunto: `Pago por aprobar: ${cliente} (${factura})`,
+      titulo: "Un cliente reportó un pago",
+      texto: `${cliente} reportó un pago de ${pesos(monto)} por ${metodo} a la factura ${factura}${referencia ? ` (ref. ${referencia})` : ""}. Revísalo en la app: Pagos > Por aprobar.`,
+      cuerpo: `<p><b>${esc(cliente)}</b> reportó un pago de <b>${pesos(monto)}</b> por ${esc(metodo)} a la factura
+        <b>${esc(factura)}</b>.${referencia ? `<br>Referencia: ${esc(referencia)}` : ""}</p>
+        <p>Revisa el comprobante y apruébalo o recházalo en la app: <b>Pagos ▸ Por aprobar</b>.</p>`
+    }),
+
+  pagoRevisado: (para, { nombre, factura, monto, aprobado, motivo, saldo }) =>
+    enviarSinFallar({
+      para,
+      asunto: aprobado ? `Pago aprobado (${factura})` : `Pago no aprobado (${factura})`,
+      titulo: aprobado ? "¡Recibimos tu pago!" : "No pudimos aprobar tu pago",
+      texto: aprobado
+        ? `Hola ${nombre}. Aprobamos tu pago de ${pesos(monto)} a la factura ${factura}. Saldo pendiente: ${pesos(saldo)}.`
+        : `Hola ${nombre}. Tu pago de ${pesos(monto)} a la factura ${factura} no fue aprobado. Motivo: ${motivo}.`,
+      cuerpo: aprobado
+        ? `<p>Hola ${esc(nombre)},</p><p>Aprobamos tu pago de <b>${pesos(monto)}</b> a la factura <b>${esc(factura)}</b>.</p>
+           <p>Saldo pendiente: <b>${pesos(saldo)}</b>.</p>`
+        : `<p>Hola ${esc(nombre)},</p><p>Tu pago de <b>${pesos(monto)}</b> a la factura <b>${esc(factura)}</b> no fue aprobado.</p>
+           <p><b>Motivo:</b> ${esc(motivo)}</p><p>Puedes reportarlo de nuevo desde la app o escribirnos por WhatsApp.</p>`
+    }),
+
+  pedidoConfirmado: (para, { nombre, pedido, factura, total, metodo }) =>
+    enviarSinFallar({
+      para,
+      asunto: `Tu pedido ${pedido} fue confirmado`,
+      titulo: "¡Pedido confirmado!",
+      texto: `Hola ${nombre}. Tu pedido ${pedido} fue confirmado (factura ${factura}, total ${pesos(total)}). ${instruccionPago(metodo)}`,
+      cuerpo: `<p>Hola ${esc(nombre)},</p><p>Tu pedido <b>${esc(pedido)}</b> fue confirmado.
+        Factura <b>${esc(factura)}</b> por <b>${pesos(total)}</b>.</p><p>${esc(instruccionPago(metodo))}</p>`
     })
 };
+
+const pesos = (n) => `$${Math.round(Number(n)).toLocaleString("es-CO")}`;
+
+function instruccionPago(metodo) {
+  if (metodo === "wompi") return "Ya puedes pagarlo en línea desde la app: Mis compras > la factura > Pagar con Wompi.";
+  if (["transferencia", "nequi", "daviplata"].includes(metodo)) {
+    return "Cuando hagas la transferencia, repórtala en la app (Mis compras > la factura > Reportar pago) y adjunta el comprobante.";
+  }
+  return "Puedes pagarlo en efectivo en el punto físico.";
+}
 
 export { correos, configurado as correoConfigurado, bandejaPrueba };

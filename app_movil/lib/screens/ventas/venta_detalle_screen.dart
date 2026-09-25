@@ -7,9 +7,11 @@ import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../pdf/documentos_pdf.dart';
+import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
 import '../clientes/cliente_detalle_screen.dart';
 import '../pagos/acciones_pago.dart';
+import '../pagos/pago_detalle.dart';
 
 /// Detalle de una venta: factura, pagos/abonos, cobro con Wompi y anulación.
 class VentaDetalleScreen extends StatefulWidget {
@@ -53,7 +55,7 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
 
   Future<void> _anular() async {
     final v = _venta!;
-    final pagosActivos = v.pagos.where((p) => !p.anulado).toList();
+    final pagosActivos = v.pagos.where((p) => p.aplicado).toList();
     final devolver = pagosActivos.fold<double>(0, (s, p) => s + p.monto);
     final motivo = await pedirTexto(
       context,
@@ -133,16 +135,30 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
         ],
       ),
       bottomNavigationBar: v.debe && Sesion.i.esCliente
-          // El cliente paga su saldo en línea con Wompi.
+          // El cliente paga su saldo: en línea con Wompi o reportando una
+          // transferencia con su comprobante (la aprueba la administradora).
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: FilledButton.icon(
-                  onPressed: () => pagarConWompi(context, v),
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                  icon: const Icon(Icons.credit_card),
-                  label: Text('Pagar ${dinero(v.saldo)} en línea'),
-                ),
+                child: Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => reportarPago(context, v),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52)),
+                      icon: const Icon(Icons.receipt_long),
+                      label: const Text('Reportar pago'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => pagarConWompi(context, v),
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
+                      icon: const Icon(Icons.credit_card),
+                      label: const Text('Pagar en línea'),
+                    ),
+                  ),
+                ]),
               ),
             )
           : v.debe
@@ -190,6 +206,7 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
               Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 etiquetaEstadoPago(v.anulada ? 'anulada' : v.estadoPago),
                 etiquetaCanal(v.canal),
+                if (v.metodoPago != null) Etiqueta(nombresMetodo[v.metodoPago] ?? v.metodoPago!, color: azul, icono: iconoMetodo(v.metodoPago!)),
                 if (v.pedidoCodigo != null) Etiqueta('Pedido ${v.pedidoCodigo}', color: azul, icono: Icons.assignment),
               ]),
               const SizedBox(height: 8),
@@ -249,18 +266,23 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
             ),
           TituloSeccion('Pagos (${v.pagos.length})'),
           if (v.pagos.isEmpty) const ListTile(title: Text('Sin pagos todavía')),
+          if (v.pagos.any((p) => p.porAprobar))
+            Card(
+              color: const Color(0xFFFFF3E0),
+              child: ListTile(
+                leading: const Icon(Icons.hourglass_top, color: ambar),
+                title: Text(Sesion.i.esAdmin ? 'Hay pagos del cliente por aprobar' : 'Tienes pagos en revisión'),
+                subtitle: Text(Sesion.i.esAdmin
+                    ? 'Toca el pago para ver el comprobante y aprobarlo o rechazarlo.'
+                    : 'El saldo se actualiza cuando la administradora los apruebe.'),
+              ),
+            ),
           for (final p in v.pagos)
-            ListTile(
-              leading: Icon(p.metodo == 'wompi' ? Icons.credit_card : Icons.payments_outlined, color: p.anulado ? gris : verde),
-              title: Text('${dinero(p.monto)} · ${nombresMetodo[p.metodo] ?? p.metodo}',
-                  style: TextStyle(decoration: p.anulado ? TextDecoration.lineThrough : null)),
-              subtitle: Text([fechaHora(p.fecha), if (p.referencia != null) 'Ref. ${p.referencia}', if (p.nota != null) p.nota!].join('\n')),
-              isThreeLine: p.referencia != null || p.nota != null,
-              trailing: p.anulado
-                  ? const Etiqueta('Anulado', color: gris)
-                  : v.anulada || !Sesion.i.esAdmin
-                      ? null
-                      : IconButton(tooltip: 'Anular pago', icon: const Icon(Icons.undo), onPressed: () => _anularPago(p)),
+            FilaPago(
+              pago: p,
+              trailing: p.aplicado && !v.anulada && Sesion.i.esAdmin
+                  ? IconButton(tooltip: 'Anular pago', icon: const Icon(Icons.undo), onPressed: () => _anularPago(p))
+                  : null,
             ),
           if (v.links.isNotEmpty) ...[
             TituloSeccion('Links Wompi (${linksActivos.length} activo${linksActivos.length == 1 ? '' : 's'})'),

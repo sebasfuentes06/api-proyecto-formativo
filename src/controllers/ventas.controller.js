@@ -70,6 +70,12 @@ const anular = asyncHandler(async (req, res) => {
       [venta.id_venta]
     );
     await db.query("UPDATE wompi_links SET estado = 'anulado' WHERE id_venta = $1 AND estado = 'activo'", [venta.id_venta]);
+    // Pagos que un cliente reportó y nadie había revisado: ya no aplican.
+    await db.query(
+      `UPDATE pagos SET estado = 'rechazado', revisado_en = CURRENT_TIMESTAMP, motivo_rechazo = 'La venta fue anulada'
+        WHERE id_venta = $1 AND estado = 'pendiente'`,
+      [venta.id_venta]
+    );
 
     await db.query(
       `UPDATE ventas SET estado = 'anulada', motivo_anulacion = $2, anulada_en = CURRENT_TIMESTAMP WHERE id_venta = $1`,

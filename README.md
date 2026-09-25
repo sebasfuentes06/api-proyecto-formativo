@@ -421,13 +421,33 @@ Además del CRUD, la API sirve a la **app Flutter del administrador**
 | `/api/usuarios` | Usuarios y roles (Administrador, Vendedor, Cliente); solo Administrador. `POST /:id/aprobar` y `/:id/rechazar` para las solicitudes de registro |
 | `POST /api/auth/registro` | Registro desde la app: queda **pendiente** hasta que el Administrador lo apruebe |
 | `POST /api/auth/olvide` y `/restablecer` | Recuperar contraseña con un código de 6 dígitos enviado al correo (vence en 15 min, 5 intentos) |
+| `POST /api/pagos` (rol Cliente) | El cliente **reporta** un pago de su saldo (transferencia, Nequi, Daviplata) con foto del comprobante; queda *por aprobar* |
+| `POST /api/pagos/:id/aprobar` y `/rechazar` | El Administrador aprueba (baja el saldo) o rechaza el reporte; al cliente le llega un correo |
+| `GET/PUT /api/pagos/:id/comprobante` | Imagen del comprobante de un pago (privada: exige sesión) |
+| `GET /api/pagos/datos-pago` | Cuenta para transferir y dirección del punto físico (variables `PAGO_TRANSFERENCIA_INFO` y `PUNTO_FISICO_DIRECCION`) |
 
-**Roles.** Administrador: todo. Vendedor: clientes, pedidos, ventas y abonos, sin
-anular ni editar catálogo o usuarios. Cliente: solo su catálogo, sus pedidos, sus
-compras y su saldo (paga en línea con Wompi). Las rutas del CRUD base siguen
+**Roles.** Administrador: todo, incluido aprobar los pagos que reportan los
+clientes. Vendedor: clientes, pedidos, ventas y abonos, sin anular ni editar
+catálogo o usuarios. Cliente: solo su catálogo, sus pedidos (escoge si paga con
+Wompi, transferencia o efectivo en el punto físico), sus compras y su saldo
+(paga en línea con Wompi o reporta la transferencia con el comprobante).
+
+**Datos del cliente.** El registro y la ficha de cliente piden, en este orden:
+nombre completo, tipo de documento (CC, TI, CE, PPT, PAS, NIT), documento,
+celular (solo números, 10 dígitos que empiezan por 3), municipio de Antioquia,
+dirección y correo. La app llena la lista de municipios consumiendo la API
+pública [API Colombia](https://api-colombia.com) (`/api/v1/Department/2/cities`)
+y trae una lista de respaldo por si no hay conexión. Las fotos del catálogo se
+pueden buscar desde la app en la API de **Wikimedia Commons** y quedan guardadas
+en la base.
+
+**Método de pago.** Toda venta nueva exige `metodo_pago` (efectivo,
+transferencia, Nequi, Daviplata, tarjeta o Wompi). Un pedido que se convierte
+en venta hereda el método que escogió el cliente. Las rutas del CRUD base siguen
 abiertas sin token para el panel web; con token se aplican los roles.
 
 Las tablas nuevas están en `database/movil.sql` (se aplica con
 `npm run db:movil` sobre una base existente). Pruebas: `npm run test:movil`
-(112 comprobaciones del proceso completo y de los roles; con `WOMPI_SIMULADO=1`
-también simula Wompi). El paso a paso del despliegue está en `DESPLIEGUE.md`, parte 6.
+(más de 150 comprobaciones del proceso completo, los roles, los pagos reportados y el
+registro; con `WOMPI_SIMULADO=1` también simula Wompi y con `CORREO_MODO=prueba`
+el flujo del código de recuperación). El paso a paso del despliegue está en `DESPLIEGUE.md`, parte 6.

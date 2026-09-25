@@ -10,6 +10,7 @@ import '../../core/eventos.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
+import '../../widgets/buscador_imagenes.dart';
 import '../../widgets/comunes.dart';
 import '../pedidos/pedido_form_screen.dart';
 import '../ventas/venta_form_screen.dart';
@@ -56,6 +57,12 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
       showDragHandle: true,
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.image_search),
+            title: const Text('Buscar imagen en internet'),
+            subtitle: const Text('API de Wikimedia Commons'),
+            onTap: () => Navigator.pop(ctx, 'internet'),
+          ),
           ListTile(leading: const Icon(Icons.photo_camera), title: const Text('Tomar foto'), onTap: () => Navigator.pop(ctx, 'camara')),
           ListTile(leading: const Icon(Icons.photo_library), title: const Text('Elegir de la galería'), onTap: () => Navigator.pop(ctx, 'galeria')),
           if (_p.imagenUrl != null)
@@ -71,6 +78,17 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
 
     if (opcion == 'quitar') {
       await conCarga(context, Api.i.delete('/api/productos/${_p.id}/imagen'));
+      return;
+    }
+
+    if (opcion == 'internet') {
+      final img = await Navigator.push<ImagenElegida>(
+        context,
+        MaterialPageRoute(builder: (_) => BuscadorImagenesScreen(busquedaInicial: _p.nombre)),
+      );
+      if (img == null || !mounted) return;
+      final r = await conCarga(context, Api.i.put('/api/productos/${_p.id}/imagen', {'base64': base64Encode(img.bytes), 'tipo_mime': img.mime}));
+      if (r != null && mounted) mostrarMensaje(context, 'Imagen guardada en el catálogo.');
       return;
     }
 
