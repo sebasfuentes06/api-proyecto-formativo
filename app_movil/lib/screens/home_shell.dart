@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../core/carrito.dart';
 import '../core/sesion.dart';
+import 'carrito/carrito_screen.dart';
 import 'catalogo/catalogo_screen.dart';
 import 'clientes/clientes_screen.dart';
 import 'cuenta/mi_cuenta_screen.dart';
@@ -54,19 +56,38 @@ class _HomeShellState extends State<HomeShell> {
   late int _indice = Sesion.i.esCliente ? 0 : 3;
 
   @override
+  void initState() {
+    super.initState();
+    // El carrito del cliente se recupera del teléfono (sigue ahí aunque haya
+    // cerrado la app).
+    final u = Sesion.i.usuario;
+    if (Sesion.i.esCliente && u != null) Carrito.i.cargar(u.id);
+  }
+
+  @override
+  void dispose() {
+    Carrito.i.soltar();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pestanas = Sesion.i.esCliente ? _cliente : _equipo;
     return Scaffold(
       body: IndexedStack(index: _indice, children: [for (final p in pestanas) p.pantalla]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _indice,
-        onDestinationSelected: (i) => setState(() => _indice = i),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: [
-          for (final p in pestanas)
-            NavigationDestination(icon: Icon(p.icono), selectedIcon: Icon(p.iconoActivo), label: p.etiqueta),
-        ],
-      ),
+      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Carrito del cliente: se ve en todas las pestañas mientras tenga algo.
+        if (Sesion.i.esCliente) const BarraCarrito(),
+        NavigationBar(
+          selectedIndex: _indice,
+          onDestinationSelected: (i) => setState(() => _indice = i),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: [
+            for (final p in pestanas)
+              NavigationDestination(icon: Icon(p.icono), selectedIcon: Icon(p.iconoActivo), label: p.etiqueta),
+          ],
+        ),
+      ]),
     );
   }
 }

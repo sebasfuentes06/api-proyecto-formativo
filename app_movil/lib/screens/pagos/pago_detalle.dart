@@ -66,8 +66,12 @@ class FilaPago extends StatelessWidget {
 /// Imagen del comprobante. La API la sirve solo con sesión, por eso se pide
 /// con la cabecera Authorization.
 class ImagenComprobante extends StatelessWidget {
-  const ImagenComprobante({super.key, required this.pago, this.version = 0, this.alto = 260});
-  final Pago pago;
+  const ImagenComprobante({super.key, this.pago, this.url, this.version = 0, this.alto = 260})
+      : assert(pago != null || url != null);
+  final Pago? pago;
+
+  /// Otra imagen privada de la API (por ejemplo, el comprobante de un pedido).
+  final String? url;
   final int version;
   final double alto;
 
@@ -76,7 +80,7 @@ class ImagenComprobante extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Image.network(
-        '${pago.comprobanteUrl}?v=$version',
+        '${url ?? pago!.comprobanteUrl}?v=$version',
         headers: {if (Api.i.token != null) 'Authorization': 'Bearer ${Api.i.token}'},
         height: alto,
         fit: BoxFit.contain,

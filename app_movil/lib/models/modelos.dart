@@ -123,6 +123,23 @@ class Producto {
         proveedor: j['proveedor'] ?? '',
         imagenActualizada: aFecha(j['imagen_actualizada']),
       );
+
+  /// Para guardar el carrito en el teléfono.
+  Json aJson() => {
+        'id_producto': id,
+        'sku': sku,
+        'nombre': nombre,
+        'descripcion': descripcion,
+        'precio': precio,
+        'stock': stock,
+        'stock_minimo': stockMinimo,
+        'estado': estado,
+        'id_categoria': idCategoria,
+        'categoria': categoria,
+        'id_proveedor': idProveedor,
+        'proveedor': proveedor,
+        'imagen_actualizada': imagenActualizada?.toUtc().toIso8601String(),
+      };
 }
 
 /// Una línea de detalle de un pedido o una venta.
@@ -176,10 +193,15 @@ class Pedido {
     this.unidades = 0,
     this.items = const [],
     this.metodoPago,
+    this.tieneComprobante = false,
   });
 
   final int id;
   final String codigo;
+  final bool tieneComprobante;
+
+  /// Foto de la transferencia que mandó el cliente (exige sesión).
+  String get comprobanteUrl => '${Config.apiUrl}/api/pedidos/$id/comprobante';
   /// Cómo va a pagar: wompi, transferencia, efectivo...
   final String? metodoPago;
   final DateTime? fecha;
@@ -214,6 +236,7 @@ class Pedido {
         unidades: aInt(j['unidades']),
         items: ((j['items'] as List?) ?? []).map((e) => Linea.desdeJson(e as Json)).toList(),
         metodoPago: j['metodo_pago'],
+        tieneComprobante: j['tiene_comprobante'] == true,
       );
 }
 

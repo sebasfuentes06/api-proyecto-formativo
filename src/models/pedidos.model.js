@@ -25,6 +25,7 @@ async function listar(filtros = {}) {
   );
   const { rows } = await query(
     `SELECT pe.id_pedido, pe.codigo, pe.fecha, pe.canal, pe.estado, pe.total, pe.notas, pe.metodo_pago,
+            EXISTS (SELECT 1 FROM pedido_comprobante pc WHERE pc.id_pedido = pe.id_pedido) AS tiene_comprobante,
             pe.id_cliente, c.nombre AS cliente, c.telefono AS cliente_telefono,
             pe.id_venta, v.numero_factura,
             (SELECT COALESCE(SUM(cantidad), 0)::INT FROM detalle_pedido d WHERE d.id_pedido = pe.id_pedido) AS unidades
@@ -46,7 +47,8 @@ async function listar(filtros = {}) {
 async function obtenerPorId(id) {
   const { rows } = await query(
     `SELECT pe.*, c.nombre AS cliente, c.telefono AS cliente_telefono, c.direccion AS cliente_direccion,
-            v.numero_factura
+            v.numero_factura,
+            EXISTS (SELECT 1 FROM pedido_comprobante pc WHERE pc.id_pedido = pe.id_pedido) AS tiene_comprobante
        FROM pedidos pe
        JOIN clientes c    ON c.id_cliente = pe.id_cliente
        LEFT JOIN ventas v ON v.id_venta   = pe.id_venta

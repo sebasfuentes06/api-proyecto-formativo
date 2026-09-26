@@ -163,20 +163,21 @@ const correos = {
            <p><b>Motivo:</b> ${esc(motivo)}</p><p>Puedes reportarlo de nuevo desde la app o escribirnos por WhatsApp.</p>`
     }),
 
-  pedidoConfirmado: (para, { nombre, pedido, factura, total, metodo }) =>
+  pedidoConfirmado: (para, { nombre, pedido, factura, total, metodo, conComprobante = false }) =>
     enviarSinFallar({
       para,
       asunto: `Tu pedido ${pedido} fue confirmado`,
       titulo: "¡Pedido confirmado!",
-      texto: `Hola ${nombre}. Tu pedido ${pedido} fue confirmado (factura ${factura}, total ${pesos(total)}). ${instruccionPago(metodo)}`,
+      texto: `Hola ${nombre}. Tu pedido ${pedido} fue confirmado (factura ${factura}, total ${pesos(total)}). ${instruccionPago(metodo, conComprobante)}`,
       cuerpo: `<p>Hola ${esc(nombre)},</p><p>Tu pedido <b>${esc(pedido)}</b> fue confirmado.
-        Factura <b>${esc(factura)}</b> por <b>${pesos(total)}</b>.</p><p>${esc(instruccionPago(metodo))}</p>`
+        Factura <b>${esc(factura)}</b> por <b>${pesos(total)}</b>.</p><p>${esc(instruccionPago(metodo, conComprobante))}</p>`
     })
 };
 
 const pesos = (n) => `$${Math.round(Number(n)).toLocaleString("es-CO")}`;
 
-function instruccionPago(metodo) {
+function instruccionPago(metodo, conComprobante = false) {
+  if (conComprobante) return "Ya tenemos el comprobante de tu transferencia: te avisaremos cuando lo aprobemos.";
   if (metodo === "wompi") return "Ya puedes pagarlo en línea desde la app: Mis compras > la factura > Pagar con Wompi.";
   if (["transferencia", "nequi", "daviplata"].includes(metodo)) {
     return "Cuando hagas la transferencia, repórtala en la app (Mis compras > la factura > Reportar pago) y adjunta el comprobante.";

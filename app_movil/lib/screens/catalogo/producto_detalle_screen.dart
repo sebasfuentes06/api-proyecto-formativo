@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api.dart';
+import '../../core/carrito.dart';
 import '../../core/contacto.dart';
 import '../../core/eventos.dart';
 import '../../core/formato.dart';
@@ -12,6 +13,7 @@ import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/buscador_imagenes.dart';
 import '../../widgets/comunes.dart';
+import '../carrito/carrito_screen.dart';
 import '../pedidos/pedido_form_screen.dart';
 import '../ventas/venta_form_screen.dart';
 import 'producto_form_screen.dart';
@@ -186,6 +188,7 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
         title: Text(_p.nombre),
         actions: [
           IconButton(tooltip: 'Compartir por WhatsApp', icon: const Icon(Icons.share), onPressed: _compartir),
+          const BotonCarrito(),
           // Editar el catálogo es del Administrador.
           if (admin)
             IconButton(
@@ -203,15 +206,36 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
       bottomNavigationBar: !_p.vendible
           ? null
           : Sesion.i.esCliente
-              // El cliente no vende: pide.
+              // El cliente no vende: agrega al carrito y pide desde ahí.
               ? SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoFormScreen(productoInicial: _p))),
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                      icon: const Icon(Icons.shopping_bag_outlined),
-                      label: const Text('Pedir este producto'),
+                    child: ListenableBuilder(
+                      listenable: Carrito.i,
+                      builder: (context, _) {
+                        final enCarrito = Carrito.i.cantidadDe(_p.id);
+                        return Row(children: [
+                          if (enCarrito > 0) ...[
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => abrirCarrito(context),
+                                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 50)),
+                                icon: const Icon(Icons.shopping_cart),
+                                label: Text('Ver carrito ($enCarrito)'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () => agregarAlCarrito(context, _p),
+                              style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
+                              icon: const Icon(Icons.add_shopping_cart),
+                              label: Text(enCarrito > 0 ? 'Agregar otro' : 'Agregar al carrito'),
+                            ),
+                          ),
+                        ]);
+                      },
                     ),
                   ),
                 )

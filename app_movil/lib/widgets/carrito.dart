@@ -12,10 +12,13 @@ import 'selectores.dart';
 /// Editor de productos de un pedido o una venta: agregar, cambiar cantidad,
 /// ajustar precio y quitar. Compartido por los dos formularios.
 class EditorCarrito extends StatelessWidget {
-  const EditorCarrito({super.key, required this.lineas, required this.onCambio});
+  const EditorCarrito({super.key, required this.lineas, required this.onCambio, this.editarPrecio = true});
 
   final List<LineaCarrito> lineas;
   final VoidCallback onCambio;
+
+  /// El equipo puede dar precio especial; el cliente no.
+  final bool editarPrecio;
 
   double get total => lineas.fold(0, (s, l) => s + l.subtotal);
 
@@ -76,7 +79,7 @@ class EditorCarrito extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(l.producto.nombre, style: tema.textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis),
                   InkWell(
-                    onTap: () => _editarPrecio(context, l),
+                    onTap: editarPrecio ? () => _editarPrecio(context, l) : null,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -85,8 +88,10 @@ class EditorCarrito extends StatelessWidget {
                               color: l.precio != l.producto.precio ? ambar : tema.colorScheme.primary,
                               fontWeight: FontWeight.w600,
                             )),
-                        const SizedBox(width: 4),
-                        Icon(Icons.edit, size: 14, color: tema.colorScheme.outline),
+                        if (editarPrecio) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.edit, size: 14, color: tema.colorScheme.outline),
+                        ],
                       ]),
                     ),
                   ),

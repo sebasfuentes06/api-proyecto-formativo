@@ -387,3 +387,21 @@ CREATE TABLE IF NOT EXISTS pago_comprobante (
     subido_en   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_comprobante_pago FOREIGN KEY (id_pago) REFERENCES pagos (id_pago) ON DELETE CASCADE
 );
+
+-- ============================================================
+-- 12. COMPROBANTE DEL PEDIDO
+-- ------------------------------------------------------------
+-- Si el cliente escoge pagar por transferencia, al hacer el pedido sube la
+-- foto del comprobante (obligatoria). Cuando el equipo convierte el pedido
+-- en venta, ese comprobante pasa a un pago "pendiente" que el
+-- Administrador aprueba en Pagos ▸ Por aprobar.
+-- ============================================================
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS referencia_pago VARCHAR(100);
+
+CREATE TABLE IF NOT EXISTS pedido_comprobante (
+    id_pedido   INT PRIMARY KEY,
+    contenido   BYTEA NOT NULL,
+    tipo_mime   VARCHAR(30) NOT NULL DEFAULT 'image/jpeg',
+    subido_en   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_comprobante_pedido FOREIGN KEY (id_pedido) REFERENCES pedidos (id_pedido) ON DELETE CASCADE
+);

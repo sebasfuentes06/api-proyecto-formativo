@@ -15,6 +15,8 @@ router.get("/:id", validarId, controlador.obtener);
 router.post("/", controlador.crear);
 router.put("/:id", validarId, controlador.actualizar);
 router.post("/:id/cancelar", validarId, controlador.cancelar);
+router.get("/:id/comprobante", validarId, controlador.verComprobante);
+router.put("/:id/comprobante", validarId, controlador.subirComprobante);
 router.post("/:id/convertir", permitir("Administrador", "Vendedor"), validarId, controlador.convertir);
 
 export default router;

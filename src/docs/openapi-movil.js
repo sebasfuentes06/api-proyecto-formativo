@@ -72,14 +72,18 @@ const pathsMovil = {
     },
     post: {
       tags: ["Pedidos"], summary: "Registrar pedido", security: SESION,
-      description: "metodo_pago: cómo va a pagar. Para el rol Cliente es obligatorio y solo puede ser wompi, transferencia o efectivo (en el punto físico).",
-      requestBody: cuerpo({ id_cliente: 1, canal: "whatsapp", metodo_pago: "transferencia", direccion_entrega: "Vereda La Loma", notas: "Envolver para regalo", items: ITEMS }),
+      description: "metodo_pago: cómo va a pagar. Para el rol Cliente es obligatorio y solo puede ser wompi, transferencia o efectivo (en el punto físico); si es transferencia, comprobante es obligatorio. El precio de un Cliente siempre sale del catálogo. Al convertir el pedido en venta, el comprobante queda como pago por aprobar.",
+      requestBody: cuerpo({ id_cliente: 1, canal: "whatsapp", metodo_pago: "transferencia", referencia_pago: "M123456", comprobante: { base64: "iVBORw0KGgo...", tipo_mime: "image/png" }, direccion_entrega: "Vereda La Loma", notas: "Envolver para regalo", items: ITEMS }),
       responses: { 201: ok("Pedido creado"), ...errores }
     }
   },
   "/api/pedidos/{id}": {
     get: { tags: ["Pedidos"], summary: "Detalle del pedido (con stock actual de cada producto)", security: SESION, parameters: [ID], responses: { 200: ok("Pedido"), 404: errores[404] } },
     put: { tags: ["Pedidos"], summary: "Actualizar pedido pendiente (items reemplaza el detalle)", security: SESION, parameters: [ID], requestBody: cuerpo({ notas: "Llega el sábado", items: ITEMS }), responses: { 200: ok("Actualizado"), ...errores } }
+  },
+  "/api/pedidos/{id}/comprobante": {
+    get: { tags: ["Pedidos"], summary: "Comprobante de la transferencia del pedido (imagen privada)", security: SESION, parameters: [ID], responses: { 200: { description: "Imagen", content: { "image/jpeg": {}, "image/png": {}, "image/webp": {} } }, 404: errores[404] } },
+    put: { tags: ["Pedidos"], summary: "Subir o cambiar el comprobante (solo pedidos pendientes)", security: SESION, parameters: [ID], requestBody: cuerpo({ base64: "iVBORw0KGgo...", tipo_mime: "image/png" }), responses: { 200: ok("Guardado"), ...errores } }
   },
   "/api/pedidos/{id}/cancelar": { post: { tags: ["Pedidos"], summary: "Cancelar pedido pendiente", security: SESION, parameters: [ID], requestBody: cuerpo({ motivo: "El cliente desistió" }), responses: { 200: ok("Cancelado"), 409: errores[409] } } },
   "/api/pedidos/{id}/convertir": {

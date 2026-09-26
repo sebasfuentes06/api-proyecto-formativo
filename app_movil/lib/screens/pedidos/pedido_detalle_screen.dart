@@ -9,6 +9,7 @@ import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
+import '../pagos/pago_detalle.dart';
 import '../ventas/venta_detalle_screen.dart';
 import 'pedido_form_screen.dart';
 
@@ -50,6 +51,23 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
+  }
+
+  int _versionComprobante = 0;
+
+  Future<void> _subirComprobante() async {
+    final f = await elegirFoto(context);
+    if (f == null || !mounted) return;
+    final datos = DatosPago()
+      ..comprobante = f.bytes
+      ..comprobanteMime = f.mime;
+    final r = await conCarga(
+      context,
+      Api.i.put('/api/pedidos/${widget.idPedido}/comprobante', datos.aJson()['comprobante'] as Map<String, dynamic>),
+    );
+    if (r == null || !mounted) return;
+    setState(() => _versionComprobante++);
+    mostrarMensaje(context, 'Comprobante guardado.');
   }
 
   Future<void> _cancelar() async {
@@ -179,6 +197,26 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
                 subtitle: Text(_instruccionPago(p)),
               ),
             ),
+          if (p.tieneComprobante || (p.pendiente && p.metodoPago == 'transferencia')) ...[
+            const TituloSeccion('Comprobante de la transferencia'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (p.tieneComprobante)
+                  ImagenComprobante(url: p.comprobanteUrl, version: _versionComprobante, alto: 240)
+                else
+                  const Text('Este pedido todavía no tiene comprobante.', style: TextStyle(color: rojo)),
+                if (p.pendiente) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _subirComprobante,
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: Text(p.tieneComprobante ? 'Cambiar comprobante' : 'Adjuntar comprobante'),
+                  ),
+                ],
+              ]),
+            ),
+          ],
           if (faltantes > 0 && p.pendiente)
             Card(
               color: tema.colorScheme.errorContainer,
@@ -225,17 +263,25 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
 String _instruccionPago(Pedido p) {
   final m = p.metodoPago;
   if (p.pendiente) {
-    if (!Sesion.i.esCliente) return 'El cliente eligió esta forma de pago. Al convertirlo en venta queda registrada.';
+    if (!Sesion.i.esCliente) {
+      return p.tieneComprobante
+          ? 'El cliente ya transfirió y adjuntó el comprobante. Al convertirlo en venta, el pago queda en Pagos ▸ Por aprobar.'
+          : 'El cliente eligió esta forma de pago. Al convertirlo en venta queda registrada.';
+    }
     return switch (m) {
       'wompi' => 'Cuando confirmemos tu pedido podrás pagarlo en línea desde la app.',
       'efectivo' => 'Pagas en efectivo en el punto físico al recoger o recibir tu pedido.',
-      _ => 'Cuando confirmemos tu pedido, transfiere y reporta el pago con la foto del comprobante.',
+      _ => p.tieneComprobante
+          ? 'Ya enviaste el comprobante. Lo revisamos al confirmar tu pedido.'
+          : 'Adjunta la foto del comprobante de tu transferencia.',
     };
   }
   return switch (m) {
     'wompi' => 'Pedido confirmado: entra a la compra y toca "Pagar en línea".',
     'efectivo' => 'Pedido confirmado: el pago se hace en efectivo en el punto físico.',
-    _ => 'Pedido confirmado: transfiere y entra a la compra para "Reportar pago" con el comprobante.',
+    _ => p.tieneComprobante
+        ? 'Pedido confirmado: tu comprobante quedó en revisión; te avisamos por correo cuando se apruebe.'
+        : 'Pedido confirmado: transfiere y entra a la compra para "Reportar pago" con el comprobante.',
   };
 }
 

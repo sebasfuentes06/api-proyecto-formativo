@@ -7,6 +7,7 @@ import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/perfil.dart';
+import '../carrito/carrito_screen.dart';
 import 'producto_detalle_screen.dart';
 import 'producto_form_screen.dart';
 
@@ -100,7 +101,7 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Catálogo'), actions: const [BotonPerfil()]),
+      appBar: AppBar(title: const Text('Catálogo'), actions: const [BotonCarrito(), BotonPerfil()]),
       // Crear productos es del Administrador.
       floatingActionButton: !Sesion.i.esAdmin
           ? null
@@ -190,7 +191,25 @@ class _TarjetaProducto extends StatelessWidget {
               Text(p.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: tema.textTheme.titleSmall),
               Text(p.categoria, style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.outline)),
               const SizedBox(height: 4),
-              Text(dinero(p.precio), style: tema.textTheme.titleMedium?.copyWith(color: tema.colorScheme.primary, fontWeight: FontWeight.w700)),
+              Row(children: [
+                Expanded(
+                  child: Text(dinero(p.precio),
+                      style: tema.textTheme.titleMedium?.copyWith(color: tema.colorScheme.primary, fontWeight: FontWeight.w700)),
+                ),
+                // Atajo del cliente: agregar al carrito sin abrir el producto.
+                if (Sesion.i.esCliente && p.vendible)
+                  SizedBox(
+                    width: 30,
+                    height: 26,
+                    child: IconButton.filledTonal(
+                      tooltip: 'Agregar al carrito',
+                      padding: EdgeInsets.zero,
+                      iconSize: 17,
+                      icon: const Icon(Icons.add_shopping_cart),
+                      onPressed: () => agregarAlCarrito(context, p),
+                    ),
+                  ),
+              ]),
               const SizedBox(height: 4),
               etiquetaStock(p),
             ]),

@@ -386,10 +386,20 @@ async function main() {
   comprobar("pedido del Cliente sin escoger cómo pagar: 400", r.estado === 400 && !!r.cuerpo?.detalles?.metodo_pago, r.cuerpo);
   r = await como(tC, "POST", "/api/pedidos", { canal: "app", metodo_pago: "tarjeta", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
   comprobar("el Cliente solo escoge Wompi, transferencia o efectivo (400)", r.estado === 400);
-  r = await como(tC, "POST", "/api/pedidos", { id_cliente: otroCliente, canal: "punto_fisico", metodo_pago: "transferencia", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  r = await como(tC, "POST", "/api/pedidos", { metodo_pago: "transferencia", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("pedido por transferencia sin comprobante: 400", r.estado === 400 && !!r.cuerpo?.detalles?.comprobante, r.cuerpo);
+  r = await como(tC, "POST", "/api/pedidos", {
+    id_cliente: otroCliente, canal: "punto_fisico", metodo_pago: "transferencia", referencia_pago: "TRF-PED-1",
+    comprobante: { base64: png1x1, tipo_mime: "image/png" },
+    items: [{ id_producto: pA.id_producto, cantidad: 1, precio_unitario: 1 }]
+  });
   comprobar("pedido del Cliente queda a su nombre, por canal app y con su forma de pago",
     r.estado === 201 && r.cuerpo?.datos?.id_cliente === idCliente && r.cuerpo?.datos?.canal === "app" && r.cuerpo?.datos?.metodo_pago === "transferencia", r.cuerpo);
   const pedidoCliente = r.cuerpo?.datos;
+  comprobar("el pedido guarda el comprobante de la transferencia", pedidoCliente?.tiene_comprobante === true);
+  comprobar("el Cliente no puede poner su propio precio", num(pedidoCliente?.total) === num(pA.precio), pedidoCliente?.total);
+  const imgPed = await fetch(`${BASE}/api/pedidos/${pedidoCliente?.id_pedido}/comprobante`, { headers: { Authorization: `Bearer ${tC}` } });
+  comprobar("el Cliente ve el comprobante de su pedido", imgPed.status === 200 && imgPed.headers.get("content-type") === "image/png");
   r = await como(tC, "POST", `/api/pedidos/${pedidoCliente?.id_pedido}/convertir`, {});
   comprobar("Cliente no convierte su pedido en venta (403)", r.estado === 403);
   r = await como(tC, "POST", `/api/pedidos/${pedidoCliente?.id_pedido}/cancelar`, { motivo: "Ya no lo quiero" });
@@ -405,6 +415,18 @@ async function main() {
   r = await pedir("POST", `/api/pedidos/${pedidoWompi?.id_pedido}/convertir`, {});
   comprobar("al convertir el pedido, la venta queda con el método que eligió el cliente", r.estado === 201 && r.cuerpo?.datos?.metodo_pago === "wompi", r.cuerpo);
   if (r.cuerpo?.datos) await pedir("POST", `/api/ventas/${r.cuerpo.datos.id_venta}/anular`, { motivo: "Limpieza de pruebas" });
+  r = await como(tC, "POST", "/api/pedidos", {
+    metodo_pago: "transferencia", comprobante: { base64: png1x1, tipo_mime: "image/png" },
+    items: [{ id_producto: pA.id_producto, cantidad: 1 }]
+  });
+  r = await pedir("POST", `/api/pedidos/${r.cuerpo?.datos?.id_pedido}/convertir`, {});
+  const ventaTrf = r.cuerpo?.datos;
+  const pagoTrf = ventaTrf?.pagos?.find((p) => p.estado === "pendiente");
+  comprobar("al convertirlo, el comprobante del pedido queda como pago por aprobar",
+    !!pagoTrf && pagoTrf.tiene_comprobante === true && num(pagoTrf.monto) === num(ventaTrf.total) && num(ventaTrf.saldo) === num(ventaTrf.total), ventaTrf?.pagos);
+  r = await pedir("POST", `/api/pagos/${pagoTrf?.id_pago}/aprobar`, {});
+  comprobar("al aprobarlo, esa venta queda pagada", r.estado === 200 && r.cuerpo?.datos?.venta?.saldo === 0, r.cuerpo);
+  if (ventaTrf) await pedir("POST", `/api/ventas/${ventaTrf.id_venta}/anular`, { motivo: "Limpieza de pruebas" });
   r = await como(tC, "GET", "/api/pagos/datos-pago");
   comprobar("el Cliente consulta los datos para pagar", r.estado === 200 && "transferencia" in (r.cuerpo?.datos ?? {}) && !!r.cuerpo?.datos?.punto_fisico);
 

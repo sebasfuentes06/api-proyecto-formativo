@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
+import '../../core/carrito.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
 import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/selectores.dart';
+import '../pagos/pago_detalle.dart';
 import 'pedido_detalle_screen.dart';
 
 /// Registrar o editar un pedido. No descuenta stock: eso pasa al convertirlo
 /// en venta.
 class PedidoFormScreen extends StatefulWidget {
-  const PedidoFormScreen({super.key, this.cliente, this.productoInicial, this.pedido});
+  const PedidoFormScreen({super.key, this.cliente, this.productoInicial, this.pedido, this.desdeCarrito = false});
+
+  /// El Cliente llega aquí desde su carrito: se precargan esos productos y,
+  /// al registrar el pedido, el carrito se vacía.
+  final bool desdeCarrito;
 
   final Cliente? cliente;
   final Producto? productoInicial;
@@ -36,6 +42,15 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   /// efectivo en el punto físico); opcional para el equipo.
   late String? _metodo = widget.pedido?.metodoPago;
 
+  /// Comprobante de la transferencia (obligatorio para el Cliente que paga
+  /// por transferencia) y datos de la cuenta a la que debe transferir.
+  final _comprobante = DatosPago(metodo: 'transferencia');
+  final _referencia = TextEditingController();
+  Map<String, dynamic>? _datosPago;
+
+  bool get _pideComprobante => Sesion.i.esCliente && _metodo == 'transferencia';
+  bool get _yaTieneComprobante => widget.pedido?.tieneComprobante ?? false;
+
   bool get _editando => widget.pedido != null;
   double get _total => _lineas.fold(0, (s, l) => s + l.subtotal);
 
@@ -50,6 +65,16 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       _canal = 'app';
     }
     if (widget.productoInicial != null) _lineas.add(LineaCarrito(widget.productoInicial!));
+    if (widget.desdeCarrito) {
+      for (final l in Carrito.i.lineas) {
+        _lineas.add(LineaCarrito(l.producto, cantidad: l.cantidad));
+      }
+    }
+    if (Sesion.i.esCliente) {
+      datosDePago().then((d) {
+        if (mounted) setState(() => _datosPago = d);
+      });
+    }
     if (_editando) {
       _cargandoEdicion = true;
       _prepararEdicion();
@@ -60,6 +85,7 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   void dispose() {
     _direccion.dispose();
     _notas.dispose();
+    _referencia.dispose();
     super.dispose();
   }
 
@@ -102,6 +128,10 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       mostrarMensaje(context, 'Elige cómo vas a pagar tu pedido.', error: true);
       return;
     }
+    if (_pideComprobante && _comprobante.comprobante == null && !_yaTieneComprobante) {
+      mostrarMensaje(context, 'Adjunta la foto del comprobante de la transferencia.', error: true);
+      return;
+    }
     final datos = {
       'id_cliente': _cliente!.id,
       if (_metodo != null) 'metodo_pago': _metodo,
@@ -109,6 +139,10 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       'direccion_entrega': _direccion.text.trim(),
       'notas': _notas.text.trim(),
       'items': _lineas.map((l) => l.aJson()).toList(),
+      if (_pideComprobante && _comprobante.comprobante != null) ...{
+        'comprobante': _comprobante.aJson()['comprobante'],
+      },
+      if (_pideComprobante && _referencia.text.trim().isNotEmpty) 'referencia_pago': _referencia.text.trim(),
     };
     final r = await conCarga(
       context,
@@ -116,12 +150,55 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
     );
     if (r == null || !mounted) return;
     final pedido = Pedido.desdeJson(r['datos']);
+    if (widget.desdeCarrito) Carrito.i.vaciar();
     mostrarMensaje(context, r['mensaje'] ?? 'Pedido guardado.');
     if (_editando) {
       Navigator.pop(context, pedido);
     } else {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(idPedido: pedido.id)));
     }
+  }
+
+  /// Transferencia: a qué cuenta pagar, comprobante (obligatorio) y referencia.
+  Widget _seccionTransferencia(ThemeData tema) {
+    final cuenta = _datosPago?['transferencia'] as String?;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Card(
+          margin: EdgeInsets.zero,
+          color: tema.colorScheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.account_balance_outlined),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(cuenta == null
+                    ? 'Transfiere el total (${dinero(_total)}) a la cuenta que te indicamos por WhatsApp y sube aquí la foto del comprobante.'
+                    : 'Transfiere ${dinero(_total)} a:\n$cuenta\n\nLuego sube aquí la foto del comprobante.'),
+              ),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+        CampoComprobante(datos: _comprobante, obligatorio: !_yaTieneComprobante, onCambio: () => setState(() {})),
+        if (_yaTieneComprobante && _comprobante.comprobante == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 4, left: 4),
+            child: Text('Ya enviaste un comprobante con este pedido. Adjunta otro solo si quieres cambiarlo.',
+                style: TextStyle(fontSize: 12)),
+          ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _referencia,
+          decoration: const InputDecoration(
+            labelText: 'Número de la transacción (opcional)',
+            prefixIcon: Icon(Icons.tag),
+          ),
+        ),
+      ]),
+    );
   }
 
   @override
@@ -178,7 +255,8 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
                 ),
               ],
               const TituloSeccion('Productos'),
-              EditorCarrito(lineas: _lineas, onCambio: () => setState(() {})),
+              // El cliente no cambia precios: los pone el catálogo.
+              EditorCarrito(lineas: _lineas, onCambio: () => setState(() {}), editarPrecio: !Sesion.i.esCliente),
               TituloSeccion(Sesion.i.esCliente ? '¿Cómo vas a pagar? *' : 'Forma de pago (opcional)'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -206,6 +284,7 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
                       ])
                     : SelectorMetodo(valor: _metodo, onCambio: (m) => setState(() => _metodo = m)),
               ),
+              if (_pideComprobante) _seccionTransferencia(tema),
               const TituloSeccion('Entrega'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

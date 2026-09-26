@@ -121,8 +121,14 @@ lib/
 
 - **Nueva venta**: el método de pago es obligatorio (efectivo, transferencia,
   Nequi, Daviplata, tarjeta o Wompi). Sale en el detalle y en la factura PDF.
+- **Carrito del cliente**: en el catálogo agrega productos (botón del carrito
+  en cada tarjeta o en el detalle). Aparece una barra con el total encima de
+  las pestañas y se queda ahí aunque cambie de pestaña o cierre la app (se
+  guarda en el teléfono). Desde el carrito: cambiar cantidades y **Hacer pedido**.
 - **Pedido del cliente**: escoge cómo va a pagar — Wompi, transferencia o
-  efectivo en el punto físico. Al convertirlo en venta se conserva.
+  efectivo en el punto físico. Si es **transferencia, la foto del comprobante
+  es obligatoria** al hacer el pedido. Al convertirlo en venta, ese comprobante
+  queda en Pagos ▸ *Por aprobar* para que el administrador lo apruebe.
 - **Reportar pago** (cliente): en una compra con saldo, el cliente escribe el
   monto, la referencia y adjunta la foto del comprobante. Queda *Por aprobar*.
 - **Aprobar** (administrador): Pagos ▸ *Por aprobar* (o el aviso en Ventas) ▸

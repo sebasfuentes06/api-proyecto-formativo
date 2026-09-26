@@ -11,10 +11,36 @@ import {
   clienteActivo,
   revisarProductos,
   registrarVenta,
-  validarMetodoVenta
+  validarMetodoVenta,
+  saldoVenta,
+  insertarPago
 } from "../services/ventas.service.js";
 import { query } from "../db/pool.js";
 import { correos } from "../services/correo.service.js";
+import { leerImagenBase64 } from "../utils/imagen.js";
+
+/**
+ * Items que manda un Cliente: el precio lo pone el catálogo, nunca la app
+ * (si no, alguien podría pedir un perfume de $300.000 a $1).
+ */
+const sinPrecio = (items) =>
+  Array.isArray(items) ? items.map(({ id_producto, cantidad }) => ({ id_producto, cantidad })) : items;
+
+/** Guarda (o reemplaza) la foto del comprobante del pedido. */
+async function guardarComprobantePedido(db, idPedido, comprobante) {
+  const { bytes, tipo } = leerImagenBase64(comprobante);
+  await db.query(
+    `INSERT INTO pedido_comprobante (id_pedido, contenido, tipo_mime) VALUES ($1, $2, $3)
+     ON CONFLICT (id_pedido) DO UPDATE SET contenido = EXCLUDED.contenido, tipo_mime = EXCLUDED.tipo_mime,
+                                           subido_en = CURRENT_TIMESTAMP`,
+    [idPedido, bytes, tipo]
+  );
+}
+
+const faltaComprobante = () =>
+  new ErrorHttp(400, "Si pagas por transferencia, adjunta la foto del comprobante.", {
+    comprobante: "Obligatorio para pagar por transferencia."
+  });
 
 /**
  * Controlador de Pedidos.
@@ -96,30 +122,41 @@ const obtener = asyncHandler(async (req, res) => {
   res.json({ ok: true, datos: pedido });
 });
 
-/** POST /api/pedidos  { id_cliente, canal, items, direccion_entrega?, notas? } */
+/**
+ * POST /api/pedidos
+ * { id_cliente, canal, items, metodo_pago, direccion_entrega?, notas?,
+ *   comprobante?: { base64, tipo_mime }, referencia_pago? }
+ *
+ * Si un Cliente escoge transferencia, el comprobante es OBLIGATORIO.
+ */
 const crear = asyncHandler(async (req, res) => {
-  // El Cliente pide para sí mismo y por la app; no escoge cliente ni canal.
-  const cuerpo = esCliente(req) ? { ...req.body, id_cliente: req.usuario.idCliente, canal: "app" } : req.body;
+  // El Cliente pide para sí mismo y por la app; no escoge cliente, canal ni precios.
+  const cuerpo = esCliente(req)
+    ? { ...req.body, id_cliente: req.usuario.idCliente, canal: "app", items: sinPrecio(req.body.items) }
+    : req.body;
   validarCanal(cuerpo.canal);
   const metodoPago = validarMetodoPedido(req, cuerpo.metodo_pago, { obligatorio: true });
+  if (esCliente(req) && metodoPago === "transferencia" && !cuerpo.comprobante) throw faltaComprobante();
   const id = await transaccion(async (db) => {
     const cliente = await clienteActivo(db, cuerpo.id_cliente);
     // Se exige stock suficiente al tomar el pedido: prometerle al cliente un
     // producto que no hay es justo el problema que describe la ficha.
     const items = await revisarProductos(db, normalizarItems(cuerpo.items));
     const { rows } = await db.query(
-      `INSERT INTO pedidos (id_cliente, canal, direccion_entrega, notas, id_usuario, metodo_pago)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_pedido`,
+      `INSERT INTO pedidos (id_cliente, canal, direccion_entrega, notas, id_usuario, metodo_pago, referencia_pago)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id_pedido`,
       [
         cliente.id_cliente,
         cuerpo.canal ?? "whatsapp",
         cuerpo.direccion_entrega?.trim() || null,
         cuerpo.notas?.trim() || null,
         req.usuario.id,
-        metodoPago
+        metodoPago,
+        String(cuerpo.referencia_pago ?? "").trim().slice(0, 100) || null
       ]
     );
     await guardarDetalle(db, rows[0].id_pedido, items);
+    if (cuerpo.comprobante) await guardarComprobantePedido(db, rows[0].id_pedido, cuerpo.comprobante);
     return rows[0].id_pedido;
   });
   const pedido = await modelo.obtenerPorId(id);
@@ -128,11 +165,19 @@ const crear = asyncHandler(async (req, res) => {
 
 /** PUT /api/pedidos/:id — solo pendientes. items, si viene, reemplaza el detalle. */
 const actualizar = asyncHandler(async (req, res) => {
-  const cuerpo = esCliente(req) ? { ...req.body, id_cliente: undefined, canal: undefined } : req.body;
+  const cuerpo = esCliente(req)
+    ? { ...req.body, id_cliente: undefined, canal: undefined, items: sinPrecio(req.body.items) }
+    : req.body;
   validarCanal(cuerpo.canal);
   const metodoPago = validarMetodoPedido(req, cuerpo.metodo_pago, { obligatorio: false });
   await transaccion(async (db) => {
     const pedido = await pedidoPendiente(db, req.idNumerico, req);
+    if (cuerpo.comprobante) await guardarComprobantePedido(db, pedido.id_pedido, cuerpo.comprobante);
+    // Si el cliente cambia a transferencia, el pedido tiene que quedar con comprobante.
+    if (esCliente(req) && (metodoPago ?? pedido.metodo_pago) === "transferencia") {
+      const { rows } = await db.query("SELECT 1 FROM pedido_comprobante WHERE id_pedido = $1", [pedido.id_pedido]);
+      if (!rows[0]) throw faltaComprobante();
+    }
     const idCliente = cuerpo.id_cliente ? (await clienteActivo(db, cuerpo.id_cliente)).id_cliente : pedido.id_cliente;
     await db.query(
       `UPDATE pedidos
@@ -141,6 +186,7 @@ const actualizar = asyncHandler(async (req, res) => {
               direccion_entrega = CASE WHEN $4::BOOLEAN THEN $5 ELSE direccion_entrega END,
               notas = CASE WHEN $6::BOOLEAN THEN $7 ELSE notas END,
               metodo_pago = COALESCE($8, metodo_pago),
+              referencia_pago = CASE WHEN $9::BOOLEAN THEN $10 ELSE referencia_pago END,
               actualizado_en = CURRENT_TIMESTAMP
         WHERE id_pedido = $1`,
       [
@@ -151,7 +197,9 @@ const actualizar = asyncHandler(async (req, res) => {
         cuerpo.direccion_entrega?.trim() || null,
         cuerpo.notas !== undefined,
         cuerpo.notas?.trim() || null,
-        metodoPago
+        metodoPago,
+        cuerpo.referencia_pago !== undefined,
+        String(cuerpo.referencia_pago ?? "").trim().slice(0, 100) || null
       ]
     );
     if (cuerpo.items !== undefined) {
@@ -208,6 +256,31 @@ const convertir = asyncHandler(async (req, res) => {
       "UPDATE pedidos SET estado = 'confirmado', id_venta = $2, actualizado_en = CURRENT_TIMESTAMP WHERE id_pedido = $1",
       [pedido.id_pedido, venta.id_venta]
     );
+
+    // El cliente ya transfirió y mandó el comprobante con el pedido: pasa a
+    // Pagos ▸ Por aprobar como un pago del cliente, por lo que quede debiendo.
+    const { rows: comp } = await db.query("SELECT contenido, tipo_mime FROM pedido_comprobante WHERE id_pedido = $1", [
+      pedido.id_pedido
+    ]);
+    if (comp[0]) {
+      const saldo = await saldoVenta(db, venta.id_venta, { bloquear: false });
+      if (saldo.saldo > 0) {
+        const pago = await insertarPago(db, {
+          id_venta: venta.id_venta,
+          monto: saldo.saldo,
+          metodo: "transferencia",
+          referencia: pedido.referencia_pago,
+          nota: `Comprobante enviado con el pedido ${pedido.codigo}`,
+          id_usuario: pedido.id_usuario,
+          estado: "pendiente"
+        });
+        await db.query("INSERT INTO pago_comprobante (id_pago, contenido, tipo_mime) VALUES ($1, $2, $3)", [
+          pago.id_pago,
+          comp[0].contenido,
+          comp[0].tipo_mime
+        ]);
+      }
+    }
     return venta.id_venta;
   });
   const venta = await ventas.obtenerPorId(idVenta);
@@ -223,7 +296,8 @@ const convertir = asyncHandler(async (req, res) => {
       pedido: venta.pedido_codigo,
       factura: venta.numero_factura,
       total: venta.total,
-      metodo: venta.metodo_pago
+      metodo: venta.metodo_pago,
+      conComprobante: venta.pagos?.some((p) => p.estado === "pendiente") ?? false
     });
   }
 
@@ -234,4 +308,31 @@ const convertir = asyncHandler(async (req, res) => {
   });
 });
 
-export default { listar, obtener, crear, actualizar, cancelar, convertir };
+/** El pedido si quien pregunta puede verlo (el Cliente, solo los suyos). */
+async function pedidoVisible(req) {
+  const { rows } = await query("SELECT id_pedido, id_cliente, estado FROM pedidos WHERE id_pedido = $1", [req.idNumerico]);
+  if (!rows[0] || (esCliente(req) && rows[0].id_cliente !== req.usuario.idCliente)) {
+    throw new ErrorHttp(404, "No existe un pedido con ese id.");
+  }
+  return rows[0];
+}
+
+/** GET /api/pedidos/:id/comprobante — imagen privada (exige sesión). */
+const verComprobante = asyncHandler(async (req, res) => {
+  await pedidoVisible(req);
+  const { rows } = await query("SELECT contenido, tipo_mime FROM pedido_comprobante WHERE id_pedido = $1", [req.idNumerico]);
+  if (!rows[0]) throw new ErrorHttp(404, "Ese pedido no tiene comprobante.");
+  res.set("Content-Type", rows[0].tipo_mime);
+  res.set("Cache-Control", "private, max-age=3600");
+  res.send(rows[0].contenido);
+});
+
+/** PUT /api/pedidos/:id/comprobante  { base64, tipo_mime } — solo mientras está pendiente. */
+const subirComprobante = asyncHandler(async (req, res) => {
+  const pedido = await pedidoVisible(req);
+  if (pedido.estado !== "pendiente") throw new ErrorHttp(409, "El pedido ya no está pendiente; no se cambia el comprobante.");
+  await transaccion((db) => guardarComprobantePedido(db, pedido.id_pedido, req.body));
+  res.json({ ok: true, mensaje: "Comprobante guardado.", datos: { id_pedido: pedido.id_pedido } });
+});
+
+export default { listar, obtener, crear, actualizar, cancelar, convertir, verComprobante, subirComprobante };
