@@ -21,9 +21,19 @@ import { noEncontrado, manejadorErrores } from "./middlewares/errores.js";
 const app = express();
 
 // 1. CORS: permite que un navegador en otro dominio llame a esta API.
+// La web del negocio y el desarrollo local siempre quedan permitidos, aunque
+// CORS_ORIGINS no los nombre. La API no usa cookies (la sesión va en el
+// encabezado Authorization), así que abrir estos orígenes no expone nada.
+const ORIGENES_FIJOS = ["https://essence-don-aire.vercel.app", "http://localhost:5175", "http://127.0.0.1:5175"];
 app.use(
   cors({
-    origin: env.corsOrigins.includes("*") ? true : env.corsOrigins
+    origin: env.corsOrigins.includes("*")
+      ? true
+      : (origen, listo) => {
+          if (!origen) return listo(null, true); // apps móviles, curl, mismo dominio
+          const limpio = origen.replace(/\/+$/, "");
+          listo(null, ORIGENES_FIJOS.includes(limpio) || env.corsOrigins.includes(limpio));
+        }
   })
 );
 

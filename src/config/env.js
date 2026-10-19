@@ -46,9 +46,11 @@ const env = {
   // Vercel define esta variable en sus despliegues. Allá la API corre como
   // función y no hay que abrir ningún puerto.
   esServerless: Boolean(process.env.VERCEL),
+  // Se limpian comillas, espacios y la "/" final: "https://x.app/" y
+  // "https://x.app" son el mismo origen para el navegador.
   corsOrigins: (process.env.CORS_ORIGINS ?? "*")
     .split(",")
-    .map((origen) => origen.trim())
+    .map((origen) => origen.trim().replace(/^["']|["']$/g, "").replace(/\/+$/, ""))
     .filter(Boolean),
   // Firma de los tokens de sesión de la app móvil. En Vercel es OBLIGATORIO
   // definirla (Settings > Environment Variables): si falta, el login responde
