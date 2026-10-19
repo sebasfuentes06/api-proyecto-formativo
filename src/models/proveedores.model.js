@@ -36,7 +36,9 @@ async function listar(filtros = {}) {
 
   const { rows } = await query(
     `SELECT p.*,
-            (SELECT COUNT(*) FROM productos pr WHERE pr.id_proveedor = p.id_proveedor)::INT AS total_productos
+            (SELECT COUNT(*) FROM productos pr WHERE pr.id_proveedor = p.id_proveedor)::INT AS total_productos,
+            (SELECT COUNT(*) FROM compras c WHERE c.id_proveedor = p.id_proveedor AND c.estado = 'vigente')::INT AS total_compras,
+            (SELECT COALESCE(SUM(c.total), 0) FROM compras c WHERE c.id_proveedor = p.id_proveedor AND c.estado = 'vigente')::NUMERIC(12,2) AS total_comprado
        FROM proveedores p
        ${where}
       ORDER BY ${columna} ${direccion}
@@ -50,7 +52,9 @@ async function listar(filtros = {}) {
 async function obtenerPorId(id) {
   const { rows } = await query(
     `SELECT p.*,
-            (SELECT COUNT(*) FROM productos pr WHERE pr.id_proveedor = p.id_proveedor)::INT AS total_productos
+            (SELECT COUNT(*) FROM productos pr WHERE pr.id_proveedor = p.id_proveedor)::INT AS total_productos,
+            (SELECT COUNT(*) FROM compras c WHERE c.id_proveedor = p.id_proveedor AND c.estado = 'vigente')::INT AS total_compras,
+            (SELECT COALESCE(SUM(c.total), 0) FROM compras c WHERE c.id_proveedor = p.id_proveedor AND c.estado = 'vigente')::NUMERIC(12,2) AS total_comprado
        FROM proveedores p
       WHERE p.id_proveedor = $1`,
     [id]
@@ -58,10 +62,10 @@ async function obtenerPorId(id) {
   return rows[0] ?? null;
 }
 
-async function crear({ nombre, contacto, email, telefono, ciudad, calificacion = 0, estado = true }) {
+async function crear({ nombre, contacto, email, telefono, ciudad, calificacion = 0, cantidad_resenas = 0, estado = true }) {
   const { rows } = await query(
-    `INSERT INTO proveedores (nombre, contacto, email, telefono, ciudad, calificacion, estado)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO proveedores (nombre, contacto, email, telefono, ciudad, calificacion, estado, cantidad_resenas)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       nombre.trim(),
@@ -70,13 +74,14 @@ async function crear({ nombre, contacto, email, telefono, ciudad, calificacion =
       telefono?.trim() || null,
       ciudad?.trim() || null,
       Number(calificacion) || 0,
-      estado
+      estado,
+      Number(cantidad_resenas) || 0
     ]
   );
   return rows[0];
 }
 
-async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calificacion, estado }) {
+async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calificacion, cantidad_resenas, estado }) {
   const { rows } = await query(
     `UPDATE proveedores
         SET nombre       = COALESCE($2, nombre),
@@ -85,7 +90,8 @@ async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calif
             telefono     = COALESCE($5, telefono),
             ciudad       = COALESCE($6, ciudad),
             calificacion = COALESCE($7, calificacion),
-            estado       = COALESCE($8, estado)
+            estado       = COALESCE($8, estado),
+            cantidad_resenas = COALESCE($9, cantidad_resenas)
       WHERE id_proveedor = $1
       RETURNING *`,
     [
@@ -96,7 +102,8 @@ async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calif
       telefono?.trim() ?? null,
       ciudad?.trim() ?? null,
       calificacion ?? null,
-      estado ?? null
+      estado ?? null,
+      cantidad_resenas ?? null
     ]
   );
   return rows[0] ?? null;
@@ -110,6 +117,11 @@ async function eliminar(id) {
   return rows[0] ?? null;
 }
 
+async function contarCompras(id) {
+  const { rows } = await query("SELECT COUNT(*)::INT AS total FROM compras WHERE id_proveedor = $1", [id]);
+  return rows[0].total;
+}
+
 async function contarProductos(id) {
   const { rows } = await query(
     "SELECT COUNT(*)::INT AS total FROM productos WHERE id_proveedor = $1",
@@ -118,4 +130,4 @@ async function contarProductos(id) {
   return rows[0].total;
 }
 
-export default { listar, obtenerPorId, crear, actualizar, eliminar, contarProductos };
+export default { listar, obtenerPorId, crear, actualizar, eliminar, contarProductos, contarCompras };

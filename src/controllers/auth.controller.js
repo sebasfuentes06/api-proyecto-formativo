@@ -23,7 +23,16 @@ function firmar(usuario) {
   );
 }
 
-const publico = ({ id_usuario, nombre, correo, rol, id_cliente }) => ({ id_usuario, nombre, correo, rol, id_cliente: id_cliente ?? null });
+const publico = ({ id_usuario, nombre, correo, rol, id_cliente, telefono, created_at, ultimo_acceso }) => ({
+  id_usuario,
+  nombre,
+  correo,
+  rol,
+  id_cliente: id_cliente ?? null,
+  telefono: telefono ?? null,
+  creado_en: created_at ?? null,
+  ultimo_acceso: ultimo_acceso ?? null
+});
 
 /** POST /api/auth/login */
 const login = asyncHandler(async (req, res) => {
@@ -55,6 +64,36 @@ const yo = asyncHandler(async (req, res) => {
   const { rows } = await query("SELECT * FROM usuarios WHERE id_usuario = $1 AND estado", [req.usuario.id]);
   if (!rows[0]) throw new ErrorHttp(401, "Sesión no válida.");
   res.json({ ok: true, datos: publico(rows[0]) });
+});
+
+/**
+ * PUT /api/auth/perfil  { nombre?, telefono? }
+ * Cada quien actualiza su nombre y celular. Si es Cliente, también su ficha.
+ */
+const actualizarPerfil = asyncHandler(async (req, res) => {
+  const nombre = req.body?.nombre === undefined ? undefined : String(req.body.nombre).trim();
+  const telefono = req.body?.telefono === undefined ? undefined : String(req.body.telefono).replace(/[\s-]/g, "");
+  const errores = {};
+  if (nombre !== undefined && (nombre.length < 3 || nombre.length > 100)) errores.nombre = "Escribe tu nombre completo.";
+  if (telefono !== undefined && telefono !== "" && !/^3\d{9}$/.test(telefono)) errores.telefono = "Solo números: 10 dígitos que empiecen por 3.";
+  if (Object.keys(errores).length) throw new ErrorHttp(400, "Revisa los datos.", errores);
+
+  const usuario = await transaccion(async (db) => {
+    const { rows } = await db.query(
+      `UPDATE usuarios SET nombre = COALESCE($2, nombre), telefono = COALESCE($3, telefono)
+        WHERE id_usuario = $1 RETURNING *`,
+      [req.usuario.id, nombre ?? null, telefono || null]
+    );
+    if (rows[0]?.id_cliente) {
+      await db.query("UPDATE clientes SET nombre = COALESCE($2, nombre), telefono = COALESCE($3, telefono) WHERE id_cliente = $1", [
+        rows[0].id_cliente,
+        nombre ?? null,
+        telefono || null
+      ]);
+    }
+    return rows[0];
+  });
+  res.json({ ok: true, mensaje: "Perfil actualizado.", datos: publico(usuario) });
 });
 
 /** PUT /api/auth/password */
@@ -278,4 +317,5 @@ const ultimoCorreoPrueba = (req, res) => {
   res.json({ ok: true, datos: correo ?? null });
 };
 
-export default { login, yo, cambiarPassword, registro, olvide, restablecer, ultimoCorreoPrueba };
+export default {
+  actualizarPerfil, login, yo, cambiarPassword, registro, olvide, restablecer, ultimoCorreoPrueba };

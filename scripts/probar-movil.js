@@ -118,6 +118,14 @@ async function main() {
   if (!token) throw new Error("Sin token no se puede seguir. Revisa ADMIN_CORREO / ADMIN_PASSWORD.");
   r = await pedir("GET", "/api/auth/yo");
   comprobar("/auth/yo devuelve al administrador", r.cuerpo?.datos?.correo === CORREO);
+  {
+    const nombreOriginal = r.cuerpo?.datos?.nombre;
+    let p = await pedir("PUT", "/api/auth/perfil", { telefono: "12345" });
+    comprobar("perfil: celular inválido -> 400", p.estado === 400 && !!p.cuerpo?.detalles?.telefono, p.cuerpo);
+    p = await pedir("PUT", "/api/auth/perfil", { nombre: "Admin Prueba Perfil", telefono: "3001112233" });
+    comprobar("perfil: actualiza nombre y celular", p.estado === 200 && p.cuerpo?.datos?.nombre === "Admin Prueba Perfil" && p.cuerpo?.datos?.telefono === "3001112233", p.cuerpo);
+    await pedir("PUT", "/api/auth/perfil", { nombre: nombreOriginal });
+  }
   const alterado = await fetch(`${BASE}/api/ventas`, { headers: { Authorization: `Bearer ${token.slice(0, -2)}xx` } });
   comprobar("token alterado es rechazado (401)", alterado.status === 401);
 
@@ -623,6 +631,43 @@ async function main() {
   titulo("Dashboard");
   r = await pedir("GET", "/api/dashboard/resumen");
   comprobar("resumen responde 200 con ventas de hoy", r.estado === 200 && num(r.cuerpo?.datos?.ventas_hoy) > 0, r.cuerpo?.datos);
+
+  // ------------------------------------------------------------------
+  titulo("Compras a proveedores");
+  {
+    const pc = (await pedir("GET", `/api/productos/${pA.id_producto}`)).cuerpo?.datos;
+    const idProv = pc.id_proveedor;
+    const antes = await stockDe(pA.id_producto);
+    r = await pedir("GET", "/api/compras/siguiente-folio");
+    comprobar("sugiere el siguiente folio OC-", /^OC-\d{3,}$/.test(r.cuerpo?.datos?.folio ?? ""), r.cuerpo);
+    r = await pedir("POST", "/api/compras", { id_proveedor: idProv, items: [] });
+    comprobar("compra sin productos -> 400", r.estado === 400 && !!r.cuerpo?.detalles?.items, r.cuerpo);
+    r = await pedir("POST", "/api/compras", {
+      id_proveedor: idProv, impuesto: 19000, items: [{ id_producto: pA.id_producto, cantidad: 5, costo_unitario: 20000 }],
+      pago_inicial: { monto: 50000, metodo: "transferencia", referencia: "T-1" }
+    });
+    const compra = r.cuerpo?.datos;
+    comprobar("registra la compra con total calculado (100000 + 19000)", r.estado === 201 && Number(compra?.total) === 119000, r.cuerpo);
+    comprobar("la compra suma al stock (+5)", (await stockDe(pA.id_producto)) === antes + 5);
+    comprobar("pago inicial deja la compra parcial", compra?.estado_pago === "parcial" && Number(compra?.saldo) === 69000, compra);
+    r = await pedir("POST", `/api/compras/${compra.id_compra}/pagos`, { monto: 999999, metodo: "efectivo" });
+    comprobar("abono mayor al saldo -> 400", r.estado === 400);
+    r = await pedir("POST", `/api/compras/${compra.id_compra}/cancelar`, { motivo: "Prueba" });
+    comprobar("no se cancela con abonos (409)", r.estado === 409);
+    const idPagoCompra = compra.pagos?.[0]?.id_pago_compra;
+    r = await pedir("DELETE", `/api/compras/${compra.id_compra}/pagos/${idPagoCompra}`);
+    comprobar("se elimina el abono", r.estado === 200 && r.cuerpo?.datos?.estado_pago === "pendiente", r.cuerpo);
+    r = await como(tV, "POST", `/api/compras/${compra.id_compra}/cancelar`, { motivo: "Prueba" });
+    comprobar("el Vendedor no cancela compras (403)", r.estado === 403);
+    r = await pedir("DELETE", `/api/compras/${compra.id_compra}`);
+    comprobar("no se elimina una compra vigente (409)", r.estado === 409);
+    r = await pedir("POST", `/api/compras/${compra.id_compra}/cancelar`, { motivo: "Prueba de cancelación" });
+    comprobar("cancelar devuelve el stock", r.estado === 200 && (await stockDe(pA.id_producto)) === antes, r.cuerpo);
+    r = await pedir("DELETE", `/api/compras/${compra.id_compra}`);
+    comprobar("una compra cancelada sí se elimina", r.estado === 200);
+    r = await como(tV, "GET", "/api/compras");
+    comprobar("el Vendedor ve las compras", r.estado === 200);
+  }
 
   // ------------------------------------------------------------------
   titulo("Limpieza");

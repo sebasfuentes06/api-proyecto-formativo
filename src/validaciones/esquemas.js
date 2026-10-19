@@ -22,6 +22,7 @@ const proveedor = {
   telefono: { etiqueta: "El teléfono", telefono: true },
   ciudad: { etiqueta: "La ciudad", texto: { max: 100 } },
   calificacion: { etiqueta: "La calificación", decimal: { min: 0, max: 5 } },
+  cantidad_resenas: { etiqueta: "La cantidad de reseñas", entero: { min: 0 } },
   estado: { etiqueta: "El estado", booleano: true }
 };
 

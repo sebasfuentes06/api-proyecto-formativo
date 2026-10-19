@@ -11,6 +11,7 @@ import pedidos from "./pedidos.routes.js";
 import ventas from "./ventas.routes.js";
 import pagos from "./pagos.routes.js";
 import usuarios from "./usuarios.routes.js";
+import compras from "./compras.routes.js";
 import { requiereSesion, permitir, rolesSiHaySesion } from "../middlewares/auth.js";
 import { ErrorHttp } from "../middlewares/errores.js";
 import { validarId } from "../middlewares/validar.js";
@@ -119,6 +120,7 @@ router.use("/ventas", requiereSesion, ventas);
 router.use("/pagos", requiereSesion, pagos);
 router.get("/dashboard/resumen", requiereSesion, permitir("Administrador", "Vendedor"), dashboard.resumen);
 router.use("/usuarios", requiereSesion, permitir("Administrador"), usuarios);
+router.use("/compras", requiereSesion, permitir("Administrador", "Vendedor"), compras);
 
 // Lo llama Wompi: no lleva sesión, lleva firma (se verifica adentro).
 router.post("/webhooks/wompi", pagosControlador.wompiWebhook);

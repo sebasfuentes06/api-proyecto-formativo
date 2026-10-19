@@ -405,3 +405,78 @@ CREATE TABLE IF NOT EXISTS pedido_comprobante (
     subido_en   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_comprobante_pedido FOREIGN KEY (id_pedido) REFERENCES pedidos (id_pedido) ON DELETE CASCADE
 );
+
+-- ============================================================
+-- 13. COMPRAS A PROVEEDORES
+-- ------------------------------------------------------------
+-- Entrada de mercancía: registrar una compra SUMA al stock de cada producto;
+-- cancelarla lo RESTA (si alcanza). Los abonos al proveedor van en
+-- pagos_compra y, como en las ventas, el saldo no se guarda: se calcula en
+-- la vista v_compras_saldo.
+-- Una compra no se edita: si quedó mal, se cancela y se registra otra.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS compras (
+    id_compra           SERIAL PRIMARY KEY,
+    folio               VARCHAR(20) NOT NULL,
+    id_proveedor        INT NOT NULL,
+    id_usuario          INT,
+    fecha               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    subtotal            NUMERIC(12,2) NOT NULL DEFAULT 0,
+    impuesto            NUMERIC(12,2) NOT NULL DEFAULT 0,
+    total               NUMERIC(12,2) NOT NULL DEFAULT 0,
+    estado              VARCHAR(12) NOT NULL DEFAULT 'vigente',
+    notas               VARCHAR(250),
+    motivo_cancelacion  VARCHAR(250),
+    cancelada_en        TIMESTAMP,
+    CONSTRAINT uq_compras_folio      UNIQUE (folio),
+    CONSTRAINT fk_compras_proveedor  FOREIGN KEY (id_proveedor) REFERENCES proveedores (id_proveedor),
+    CONSTRAINT fk_compras_usuario    FOREIGN KEY (id_usuario)   REFERENCES usuarios (id_usuario),
+    CONSTRAINT chk_compras_estado    CHECK (estado IN ('vigente', 'cancelada')),
+    CONSTRAINT chk_compras_totales   CHECK (subtotal >= 0 AND impuesto >= 0 AND total >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS detalle_compra (
+    id_detalle      SERIAL PRIMARY KEY,
+    id_compra       INT NOT NULL,
+    id_producto     INT NOT NULL,
+    cantidad        INT NOT NULL,
+    costo_unitario  NUMERIC(12,2) NOT NULL,
+    subtotal        NUMERIC(12,2) NOT NULL,
+    CONSTRAINT fk_detcompra_compra    FOREIGN KEY (id_compra)   REFERENCES compras (id_compra) ON DELETE CASCADE,
+    CONSTRAINT fk_detcompra_producto  FOREIGN KEY (id_producto) REFERENCES productos (id_producto),
+    CONSTRAINT chk_detcompra_cantidad CHECK (cantidad > 0),
+    CONSTRAINT chk_detcompra_costo    CHECK (costo_unitario >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS pagos_compra (
+    id_pago_compra  SERIAL PRIMARY KEY,
+    id_compra       INT NOT NULL,
+    monto           NUMERIC(12,2) NOT NULL,
+    metodo          VARCHAR(20) NOT NULL,
+    referencia      VARCHAR(100),
+    id_usuario      INT,
+    fecha           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_pagoscompra_compra  FOREIGN KEY (id_compra)  REFERENCES compras (id_compra) ON DELETE CASCADE,
+    CONSTRAINT fk_pagoscompra_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario),
+    CONSTRAINT chk_pagoscompra_monto  CHECK (monto > 0),
+    CONSTRAINT chk_pagoscompra_metodo CHECK (metodo IN ('efectivo', 'transferencia', 'nequi', 'daviplata', 'tarjeta'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_compras_proveedor ON compras (id_proveedor);
+CREATE INDEX IF NOT EXISTS idx_detcompra_compra  ON detalle_compra (id_compra);
+CREATE INDEX IF NOT EXISTS idx_pagoscompra_compra ON pagos_compra (id_compra);
+
+CREATE OR REPLACE VIEW v_compras_saldo AS
+SELECT c.id_compra,
+       c.total,
+       COALESCE(SUM(p.monto), 0)::NUMERIC(12,2) AS pagado,
+       (c.total - COALESCE(SUM(p.monto), 0))::NUMERIC(12,2) AS saldo,
+       CASE
+         WHEN c.estado = 'cancelada' THEN 'cancelada'
+         WHEN COALESCE(SUM(p.monto), 0) >= c.total THEN 'pagada'
+         WHEN COALESCE(SUM(p.monto), 0) > 0 THEN 'parcial'
+         ELSE 'pendiente'
+       END AS estado_pago
+  FROM compras c
+  LEFT JOIN pagos_compra p ON p.id_compra = c.id_compra
+ GROUP BY c.id_compra, c.total, c.estado;

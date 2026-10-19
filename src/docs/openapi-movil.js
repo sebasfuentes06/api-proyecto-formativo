@@ -24,6 +24,7 @@ const tagsMovil = [
   { name: "Pagos", description: "Pagos totales o parciales (abonos), cartera pendiente y Wompi." },
   { name: "Cuentas de cliente", description: "Historial de compras y estado de cuenta." },
   { name: "Dashboard", description: "Indicadores para la pantalla principal de la app." },
+  { name: "Compras", description: "Compras a proveedores: entrada de mercancía (suma al stock), abonos al proveedor y cancelación. Ver: Administrador y Vendedor; escribir: Administrador." },
   { name: "Usuarios", description: "Cuentas de la app y sus roles: Administrador, Vendedor y Cliente. Solo Administrador." }
 ];
 
@@ -62,6 +63,14 @@ const pathsMovil = {
   "/api/auth/yo": { get: { tags: ["Sesión"], summary: "Usuario de la sesión actual", security: SESION, responses: { 200: ok("Usuario"), 401: errores[401] } } },
   "/api/auth/password": {
     put: { tags: ["Sesión"], summary: "Cambiar la contraseña propia", security: SESION, requestBody: cuerpo({ actual: "Essence2026*", nueva: "OtraClave2026" }), responses: { 200: ok("Actualizada"), 400: errores[400] } }
+  },
+  "/api/auth/perfil": {
+    put: {
+      tags: ["Sesión"], summary: "Actualizar mi perfil (nombre y celular)", security: SESION,
+      description: "Si el usuario es Cliente, también se actualiza su ficha de cliente. El celular es colombiano: 10 dígitos que empiezan por 3.",
+      requestBody: cuerpo({ nombre: "Ana Gómez", telefono: "3001234567" }),
+      responses: { 200: ok("Usuario actualizado"), 400: errores[400], 401: errores[401] }
+    }
   },
 
   "/api/pedidos": {
@@ -145,6 +154,43 @@ const pathsMovil = {
     put: { tags: ["Productos"], summary: "Subir o reemplazar la foto (base64)", security: SESION, parameters: [ID], requestBody: cuerpo({ base64: "/9j/4AAQSkZJRg...", tipo_mime: "image/jpeg" }), responses: { 200: ok("Guardada"), 400: errores[400], 413: { description: "Demasiado pesada" } } },
     delete: { tags: ["Productos"], summary: "Quitar la foto", security: SESION, parameters: [ID], responses: { 200: ok("Eliminada"), 404: errores[404] } }
   },
+  "/api/compras": {
+    get: {
+      tags: ["Compras"], summary: "Listar compras a proveedores", security: SESION,
+      description: "Administrador y Vendedor. Trae pagado, saldo y estado_pago (pendiente | parcial | pagada | cancelada) y un resumen con lo comprado y lo que falta por pagar.",
+      parameters: [q("search", "Folio o proveedor"), q("id_proveedor", "Proveedor", { type: "integer" }), q("estado", "vigente | cancelada"), q("estado_pago", "pendiente | parcial | pagada"), q("desde", "AAAA-MM-DD"), q("hasta", "AAAA-MM-DD"), q("page", "Página", { type: "integer" }), q("limit", "Por página", { type: "integer" })],
+      responses: { 200: ok("Listado paginado"), 401: errores[401], 403: { description: "Sin permiso para esta acción" } }
+    },
+    post: {
+      tags: ["Compras"], summary: "Registrar compra (suma al stock)", security: SESION,
+      description: "Solo Administrador. Los totales se calculan en el servidor. Los productos deben ser del proveedor. folio es opcional (se genera OC-001…).",
+      requestBody: cuerpo({ id_proveedor: 1, impuesto: 0, notas: "Factura del proveedor 4581", items: [{ id_producto: 1, cantidad: 12, costo_unitario: 95000 }], pago_inicial: { monto: 500000, metodo: "transferencia", referencia: "T-998" } }),
+      responses: { 201: ok("Compra registrada"), ...errores }
+    }
+  },
+  "/api/compras/siguiente-folio": { get: { tags: ["Compras"], summary: "Folio sugerido para la próxima compra", security: SESION, responses: { 200: ok("{ folio }") } } },
+  "/api/compras/{id}": {
+    get: { tags: ["Compras"], summary: "Detalle de la compra (productos y abonos)", security: SESION, parameters: [ID], responses: { 200: ok("Compra"), 404: errores[404] } },
+    delete: { tags: ["Compras"], summary: "Eliminar una compra ya cancelada", security: SESION, parameters: [ID], responses: { 200: ok("Eliminada"), 409: errores[409] } }
+  },
+  "/api/compras/{id}/pagos": {
+    post: { tags: ["Compras"], summary: "Abono al proveedor", security: SESION, parameters: [ID], requestBody: cuerpo({ monto: 200000, metodo: "efectivo", referencia: "" }), responses: { 201: ok("Abono registrado"), ...errores } }
+  },
+  "/api/compras/{id}/pagos/{idPago}": {
+    delete: {
+      tags: ["Compras"], summary: "Eliminar un abono mal registrado", security: SESION,
+      parameters: [ID, { name: "idPago", in: "path", required: true, schema: { type: "integer", minimum: 1 } }],
+      responses: { 200: ok("Abono eliminado"), 404: errores[404] }
+    }
+  },
+  "/api/compras/{id}/cancelar": {
+    post: {
+      tags: ["Compras"], summary: "Cancelar compra (resta el stock)", security: SESION,
+      description: "Se bloquea si la compra tiene abonos o si ya se vendió parte de la mercancía.",
+      parameters: [ID], requestBody: cuerpo({ motivo: "El proveedor no entregó" }), responses: { 200: ok("Cancelada"), ...errores }
+    }
+  },
+
   "/api/usuarios": {
     get: { tags: ["Usuarios"], summary: "Listar usuarios y solicitudes", security: SESION, parameters: [q("search", "Nombre o correo"), q("rol", "Administrador | Vendedor | Cliente"), q("status", "active | inactive"), q("aprobacion", "pendiente | aprobado | rechazado")], responses: { 200: ok("Listado"), 403: { description: "Solo Administrador" } } },
     post: {

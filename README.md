@@ -425,6 +425,8 @@ Además del CRUD, la API sirve a la **app Flutter del administrador**
 | `POST /api/pagos/:id/aprobar` y `/rechazar` | El Administrador aprueba (baja el saldo) o rechaza el reporte; al cliente le llega un correo |
 | `GET/PUT /api/pagos/:id/comprobante` | Imagen del comprobante de un pago (privada: exige sesión) |
 | `GET /api/pagos/datos-pago` | Cuenta para transferir y dirección del punto físico (variables `PAGO_TRANSFERENCIA_INFO` y `PUNTO_FISICO_DIRECCION`) |
+| `PUT /api/auth/perfil` | Cada usuario edita su nombre y celular (si es Cliente, también su ficha) |
+| `/api/compras` | Compras a proveedores: registrar **suma** al stock, `POST /:id/pagos` abona al proveedor, `POST /:id/cancelar` **resta** el stock (si alcanza y sin abonos). Ver: Administrador y Vendedor; escribir: Administrador |
 
 **Roles.** Administrador: todo, incluido aprobar los pagos que reportan los
 clientes. Vendedor: clientes, pedidos, ventas y abonos, sin anular ni editar
@@ -446,8 +448,11 @@ transferencia, Nequi, Daviplata, tarjeta o Wompi). Un pedido que se convierte
 en venta hereda el método que escogió el cliente. Las rutas del CRUD base siguen
 abiertas sin token para el panel web; con token se aplican los roles.
 
+**Web del negocio.** El panel web (proyecto `Proyecto_Figma`) consume esta
+misma API, así que la web y la app trabajan sobre los mismos datos.
+
 Las tablas nuevas están en `database/movil.sql` (se aplica con
 `npm run db:movil` sobre una base existente). Pruebas: `npm run test:movil`
-(más de 150 comprobaciones del proceso completo, los roles, los pagos reportados y el
+(más de 180 comprobaciones del proceso completo, los roles, los pagos reportados y el
 registro; con `WOMPI_SIMULADO=1` también simula Wompi y con `CORREO_MODO=prueba`
 el flujo del código de recuperación). El paso a paso del despliegue está en `DESPLIEGUE.md`, parte 6.

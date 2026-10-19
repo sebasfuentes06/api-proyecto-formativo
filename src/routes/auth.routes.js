@@ -12,5 +12,6 @@ router.post("/restablecer", controlador.restablecer);
 router.get("/prueba/ultimo-correo", controlador.ultimoCorreoPrueba);
 router.get("/yo", requiereSesion, controlador.yo);
 router.put("/password", requiereSesion, controlador.cambiarPassword);
+router.put("/perfil", requiereSesion, controlador.actualizarPerfil);
 
 export default router;
