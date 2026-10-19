@@ -161,10 +161,10 @@ const registro = asyncHandler(async (req, res) => {
       );
     } else {
       const { rows } = await db.query(
-        `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, tipo_documento, documento, estado, notas)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, 'Registrado desde la app (pendiente de aprobación)')
+        `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, tipo_documento, documento, estado, notas, departamento)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, 'Registrado desde la app (pendiente de aprobación)', COALESCE($8, 'Antioquia'))
          RETURNING id_cliente`,
-        [datos.nombre, datos.correo, datos.telefono, datos.direccion, datos.ciudad, datos.tipo_documento, datos.documento]
+        [datos.nombre, datos.correo, datos.telefono, datos.direccion, datos.ciudad, datos.tipo_documento, datos.documento, datos.departamento || null]
       );
       idCliente = rows[0].id_cliente;
     }

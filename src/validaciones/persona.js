@@ -41,6 +41,7 @@ function validarPersona(b = {}, { parcial = false, correoObligatorio = false } =
     tipo_documento: texto(b.tipo_documento)?.toUpperCase(),
     documento: texto(b.documento)?.replace(/[.\s]/g, ""),
     telefono: texto(b.telefono)?.replace(/[\s-]/g, ""),
+    departamento: texto(b.departamento),
     ciudad: texto(b.ciudad),
     direccion: texto(b.direccion),
     correo: texto(b.correo)?.toLowerCase()
@@ -73,6 +74,8 @@ function validarPersona(b = {}, { parcial = false, correoObligatorio = false } =
 
   if (falta("ciudad")) errores.ciudad = "Elige el municipio.";
   else if (revisar("ciudad") && d.ciudad.length > 100) errores.ciudad = "Máximo 100 caracteres.";
+
+  if (d.departamento !== undefined && d.departamento.length > 60) errores.departamento = "Máximo 60 caracteres.";
 
   if (d.direccion !== undefined && d.direccion.length > 150) errores.direccion = "Máximo 150 caracteres.";
 

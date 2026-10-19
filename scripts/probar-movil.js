@@ -633,6 +633,23 @@ async function main() {
   comprobar("resumen responde 200 con ventas de hoy", r.estado === 200 && num(r.cuerpo?.datos?.ventas_hoy) > 0, r.cuerpo?.datos);
 
   // ------------------------------------------------------------------
+  titulo("Proveedor con documento y departamento");
+  {
+    let rp = await pedir("POST", "/api/proveedores", { nombre: `Prov ${marca}`, tipo_persona: "otra" });
+    comprobar("tipo de persona inválido -> 400", rp.estado === 400 && !!rp.cuerpo?.detalles?.tipo_persona, rp.cuerpo);
+    rp = await pedir("POST", "/api/proveedores", {
+      nombre: `Prov ${marca}`, tipo_persona: "juridica", tipo_documento: "NIT", documento: "900123456-7",
+      departamento: "Cundinamarca", ciudad: "Chía"
+    });
+    const pv = rp.cuerpo?.datos;
+    comprobar("proveedor guarda tipo de persona, documento y departamento",
+      rp.estado === 201 && pv?.tipo_persona === "juridica" && pv?.tipo_documento === "NIT" && pv?.departamento === "Cundinamarca", rp.cuerpo);
+    if (pv?.id_proveedor) await pedir("DELETE", `/api/proveedores/${pv.id_proveedor}`);
+    const rc = await pedir("GET", `/api/clientes/${idCliente}`);
+    comprobar("el cliente queda en Antioquia por defecto", rc.cuerpo?.datos?.departamento === "Antioquia", rc.cuerpo?.datos);
+  }
+
+  // ------------------------------------------------------------------
   titulo("Compras a proveedores");
   {
     const pc = (await pedir("GET", `/api/productos/${pA.id_producto}`)).cuerpo?.datos;

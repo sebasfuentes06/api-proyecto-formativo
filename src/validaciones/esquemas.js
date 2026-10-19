@@ -16,10 +16,14 @@ const categoria = {
 };
 
 const proveedor = {
+  tipo_persona: { etiqueta: "El tipo de persona", opciones: { valores: ["natural", "juridica"] } },
+  tipo_documento: { etiqueta: "El tipo de documento", opciones: { valores: ["CC", "CE", "NIT", "PPT", "PAS"] } },
+  documento: { etiqueta: "El documento", texto: { max: 20 } },
   nombre: { etiqueta: "El nombre", requerido: true, texto: { max: 100 } },
   contacto: { etiqueta: "El contacto", texto: { max: 100 } },
   email: { etiqueta: "El correo", correo: true, texto: { max: 100 } },
   telefono: { etiqueta: "El teléfono", telefono: true },
+  departamento: { etiqueta: "El departamento", texto: { max: 60 } },
   ciudad: { etiqueta: "La ciudad", texto: { max: 100 } },
   calificacion: { etiqueta: "La calificación", decimal: { min: 0, max: 5 } },
   cantidad_resenas: { etiqueta: "La cantidad de reseñas", entero: { min: 0 } },
@@ -33,6 +37,7 @@ const cliente = {
   correo: { etiqueta: "El correo", correo: true, texto: { max: 100 } },
   telefono: { etiqueta: "El teléfono", telefono: true },
   direccion: { etiqueta: "La dirección", texto: { max: 150 } },
+  departamento: { etiqueta: "El departamento", texto: { max: 60 } },
   ciudad: { etiqueta: "La ciudad", texto: { max: 100 } },
   tipo_documento: { etiqueta: "El tipo de documento", texto: { max: 5 } },
   documento: { etiqueta: "El documento", texto: { max: 20 } },

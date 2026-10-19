@@ -480,3 +480,17 @@ SELECT c.id_compra,
   FROM compras c
   LEFT JOIN pagos_compra p ON p.id_compra = c.id_compra
  GROUP BY c.id_compra, c.total, c.estado;
+
+-- ============================================================
+-- 14. DEPARTAMENTO Y DOCUMENTO DEL PROVEEDOR / DEPARTAMENTO DEL CLIENTE
+-- ------------------------------------------------------------
+-- Correcciones del instructor: el proveedor lleva tipo de persona
+-- (natural o jurídica), tipo y número de documento, departamento y
+-- ciudad. El cliente guarda también el departamento (por defecto
+-- Antioquia, que es donde está el negocio).
+-- ============================================================
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tipo_persona   VARCHAR(10);
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(5);
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS documento      VARCHAR(20);
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS departamento   VARCHAR(60);
+ALTER TABLE clientes    ADD COLUMN IF NOT EXISTS departamento   VARCHAR(60) DEFAULT 'Antioquia';

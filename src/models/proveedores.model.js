@@ -62,10 +62,10 @@ async function obtenerPorId(id) {
   return rows[0] ?? null;
 }
 
-async function crear({ nombre, contacto, email, telefono, ciudad, calificacion = 0, cantidad_resenas = 0, estado = true }) {
+async function crear({ nombre, contacto, email, telefono, ciudad, calificacion = 0, cantidad_resenas = 0, estado = true, tipo_persona, tipo_documento, documento, departamento }) {
   const { rows } = await query(
-    `INSERT INTO proveedores (nombre, contacto, email, telefono, ciudad, calificacion, estado, cantidad_resenas)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO proveedores (nombre, contacto, email, telefono, ciudad, calificacion, estado, cantidad_resenas, tipo_persona, tipo_documento, documento, departamento)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       nombre.trim(),
@@ -75,13 +75,17 @@ async function crear({ nombre, contacto, email, telefono, ciudad, calificacion =
       ciudad?.trim() || null,
       Number(calificacion) || 0,
       estado,
-      Number(cantidad_resenas) || 0
+      Number(cantidad_resenas) || 0,
+      tipo_persona?.trim() || null,
+      tipo_documento?.trim().toUpperCase() || null,
+      documento?.trim().replace(/[.\s]/g, "") || null,
+      departamento?.trim() || null
     ]
   );
   return rows[0];
 }
 
-async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calificacion, cantidad_resenas, estado }) {
+async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calificacion, cantidad_resenas, estado, tipo_persona, tipo_documento, documento, departamento }) {
   const { rows } = await query(
     `UPDATE proveedores
         SET nombre       = COALESCE($2, nombre),
@@ -91,7 +95,11 @@ async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calif
             ciudad       = COALESCE($6, ciudad),
             calificacion = COALESCE($7, calificacion),
             estado       = COALESCE($8, estado),
-            cantidad_resenas = COALESCE($9, cantidad_resenas)
+            cantidad_resenas = COALESCE($9, cantidad_resenas),
+            tipo_persona   = COALESCE($10, tipo_persona),
+            tipo_documento = COALESCE($11, tipo_documento),
+            documento      = COALESCE($12, documento),
+            departamento   = COALESCE($13, departamento)
       WHERE id_proveedor = $1
       RETURNING *`,
     [
@@ -103,7 +111,11 @@ async function actualizar(id, { nombre, contacto, email, telefono, ciudad, calif
       ciudad?.trim() ?? null,
       calificacion ?? null,
       estado ?? null,
-      cantidad_resenas ?? null
+      cantidad_resenas ?? null,
+      tipo_persona?.trim() ?? null,
+      tipo_documento?.trim().toUpperCase() ?? null,
+      documento?.trim().replace(/[.\s]/g, "") ?? null,
+      departamento?.trim() ?? null
     ]
   );
   return rows[0] ?? null;

@@ -53,6 +53,11 @@ const reglas = {
     return null;
   },
 
+  opciones: (valor, campo, { valores }) =>
+    !estaVacio(valor) && !valores.includes(String(valor).trim())
+      ? `${campo} debe ser uno de: ${valores.join(", ")}.`
+      : null,
+
   booleano: (valor, campo) =>
     valor !== undefined && typeof valor !== "boolean"
       ? `${campo} debe ser verdadero o falso.`

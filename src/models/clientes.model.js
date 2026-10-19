@@ -70,10 +70,10 @@ async function obtenerPorId(id) {
   return rows[0] ?? null;
 }
 
-async function crear({ nombre, correo, telefono, direccion, ciudad, documento, notas, estado = true, tipo_documento }) {
+async function crear({ nombre, correo, telefono, direccion, ciudad, documento, notas, estado = true, tipo_documento, departamento }) {
   const { rows } = await query(
-    `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, estado, documento, notas, tipo_documento)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO clientes (nombre, correo, telefono, direccion, ciudad, estado, documento, notas, tipo_documento, departamento)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'Antioquia'))
      RETURNING id_cliente`,
     [
       nombre.trim(),
@@ -87,13 +87,14 @@ async function crear({ nombre, correo, telefono, direccion, ciudad, documento, n
       estado,
       documento?.trim() || null,
       notas?.trim() || null,
-      tipo_documento?.trim().toUpperCase() || null
+      tipo_documento?.trim().toUpperCase() || null,
+      departamento?.trim() || null
     ]
   );
   return obtenerPorId(rows[0].id_cliente);
 }
 
-async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, estado, documento, notas, tipo_documento }) {
+async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, estado, documento, notas, tipo_documento, departamento }) {
   const { rowCount } = await query(
     `UPDATE clientes
         SET nombre    = COALESCE($2, nombre),
@@ -104,7 +105,8 @@ async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, est
             estado    = COALESCE($7, estado),
             documento = COALESCE($8, documento),
             notas     = COALESCE($9, notas),
-            tipo_documento = COALESCE($10, tipo_documento)
+            tipo_documento = COALESCE($10, tipo_documento),
+            departamento = COALESCE($11, departamento)
       WHERE id_cliente = $1`,
     [
       id,
@@ -116,7 +118,8 @@ async function actualizar(id, { nombre, correo, telefono, direccion, ciudad, est
       estado ?? null,
       documento?.trim() ?? null,
       notas?.trim() ?? null,
-      tipo_documento?.trim().toUpperCase() ?? null
+      tipo_documento?.trim().toUpperCase() ?? null,
+      departamento?.trim() ?? null
     ]
   );
   return rowCount ? obtenerPorId(id) : null;
