@@ -494,3 +494,29 @@ ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(5);
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS documento      VARCHAR(20);
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS departamento   VARCHAR(60);
 ALTER TABLE clientes    ADD COLUMN IF NOT EXISTS departamento   VARCHAR(60) DEFAULT 'Antioquia';
+
+-- ============================================================
+-- 15. PERMISOS POR PERSONA Y VERIFICACIÓN DEL CORREO
+-- ------------------------------------------------------------
+-- usuarios.permisos: NULL = los de su rol; una lista = los que le asignó el
+-- Administrador (ver src/config/permisos.js). El Administrador siempre los
+-- tiene todos.
+-- usuarios.correo_verificado: se confirma desde "Mi perfil" con un código
+-- de 6 dígitos enviado al correo (codigos_verificacion).
+-- ============================================================
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos TEXT[];
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_verificado BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_verificado_en TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS codigos_verificacion (
+    id_codigo    SERIAL PRIMARY KEY,
+    id_usuario   INT NOT NULL,
+    correo       VARCHAR(100) NOT NULL,
+    codigo_hash  VARCHAR(64) NOT NULL,
+    expira_en    TIMESTAMP NOT NULL,
+    intentos     INT NOT NULL DEFAULT 0,
+    usado_en     TIMESTAMP,
+    creado_en    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_codverif_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_codverif_usuario ON codigos_verificacion (id_usuario);

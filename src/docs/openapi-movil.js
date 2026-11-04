@@ -64,6 +64,12 @@ const pathsMovil = {
   "/api/auth/password": {
     put: { tags: ["Sesión"], summary: "Cambiar la contraseña propia", security: SESION, requestBody: cuerpo({ actual: "Essence2026*", nueva: "OtraClave2026" }), responses: { 200: ok("Actualizada"), 400: errores[400] } }
   },
+  "/api/auth/verificar-correo/enviar": {
+    post: { tags: ["Sesión"], summary: "Enviar código para verificar mi correo", security: SESION, description: "Manda un código de 6 dígitos (vence en 15 minutos). Espera 60 s entre envíos.", responses: { 200: ok("Enviado"), 429: { description: "Espera antes de pedir otro" }, 503: { description: "Correo no configurado" } } }
+  },
+  "/api/auth/verificar-correo": {
+    post: { tags: ["Sesión"], summary: "Confirmar el código y marcar mi correo como verificado", security: SESION, requestBody: cuerpo({ codigo: "123456" }), responses: { 200: ok("Usuario con correo_verificado = true"), 400: errores[400] } }
+  },
   "/api/auth/perfil": {
     put: {
       tags: ["Sesión"], summary: "Actualizar mi perfil (nombre y celular)", security: SESION,
@@ -202,8 +208,8 @@ const pathsMovil = {
   },
   "/api/usuarios/{id}": {
     put: {
-      tags: ["Usuarios"], summary: "Editar usuario (nombre, correo, rol, estado, ficha)", security: SESION, parameters: [ID],
-      description: "No deja desactivar ni quitarle el rol al único Administrador activo.",
+      tags: ["Usuarios"], summary: "Editar usuario (nombre, correo, rol, estado, ficha, permisos)", security: SESION, parameters: [ID],
+      description: "No deja desactivar ni quitarle el rol al único Administrador activo. permisos (solo el Administrador): lista de claves <módulo>.<acción> (ej. sales.create) para dar o quitar permisos a esa persona; null vuelve a los del rol. El Administrador siempre tiene todos y el Cliente los de su rol.",
       requestBody: cuerpo({ rol: "Cliente", id_cliente: 3, estado: true }),
       responses: { 200: ok("Actualizado"), ...errores }
     }

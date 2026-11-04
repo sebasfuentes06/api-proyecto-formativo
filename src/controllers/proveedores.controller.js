@@ -45,7 +45,7 @@ const eliminar = asyncHandler(async (req, res) => {
 
   const compras = await modelo.contarCompras(id);
   if (compras > 0) {
-    throw new ErrorHttp(409, `No se puede eliminar: el proveedor tiene ${compras} compra(s) registradas. Desactívalo en lugar de borrarlo.`);
+    throw new ErrorHttp(409, `No se puede eliminar: el proveedor está agregado a ${compras} compra(s). Desactívalo en lugar de borrarlo.`);
   }
 
   const proveedor = await modelo.eliminar(id);

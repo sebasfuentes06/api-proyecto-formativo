@@ -1,7 +1,7 @@
 import { Router } from "express";
 import controlador from "../controllers/compras.controller.js";
 import { validarId } from "../middlewares/validar.js";
-import { permitir } from "../middlewares/auth.js";
+import { exigirPermiso } from "../middlewares/auth.js";
 
 /**
  * Rutas de Compras a proveedores. La sesión se exige en routes/index.js.
@@ -9,15 +9,14 @@ import { permitir } from "../middlewares/auth.js";
  * solo el Administrador.
  */
 const router = Router();
-const admin = permitir("Administrador");
 
-router.get("/", controlador.listar);
-router.get("/siguiente-folio", controlador.siguienteFolio);
-router.get("/:id", validarId, controlador.obtener);
-router.post("/", admin, controlador.crear);
-router.post("/:id/pagos", admin, validarId, controlador.registrarPago);
-router.delete("/:id/pagos/:idPago", admin, validarId, controlador.eliminarPago);
-router.post("/:id/cancelar", admin, validarId, controlador.cancelar);
-router.delete("/:id", admin, validarId, controlador.eliminar);
+router.get("/", exigirPermiso("purchases.view"), controlador.listar);
+router.get("/siguiente-folio", exigirPermiso("purchases.view"), controlador.siguienteFolio);
+router.get("/:id", exigirPermiso("purchases.view"), validarId, controlador.obtener);
+router.post("/", exigirPermiso("purchases.create"), controlador.crear);
+router.post("/:id/pagos", exigirPermiso("purchases.create", "purchases.edit"), validarId, controlador.registrarPago);
+router.delete("/:id/pagos/:idPago", exigirPermiso("purchases.edit"), validarId, controlador.eliminarPago);
+router.post("/:id/cancelar", exigirPermiso("purchases.edit"), validarId, controlador.cancelar);
+router.delete("/:id", exigirPermiso("purchases.delete"), validarId, controlador.eliminar);
 
 export default router;

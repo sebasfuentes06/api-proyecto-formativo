@@ -95,6 +95,17 @@ const correos = {
         <p>Vence en <b>${minutos} minutos</b>. Si no lo pediste, ignora este correo: tu contraseña sigue igual.</p>`
     }),
 
+  verificacion: (para, nombre, codigo, minutos) =>
+    enviar({
+      para,
+      asunto: `${codigo} es tu código para verificar tu correo`,
+      titulo: "Verifica tu correo",
+      texto: `Hola ${nombre}. Tu código de verificación es ${codigo}. Vence en ${minutos} minutos.`,
+      cuerpo: `<p>Hola ${esc(nombre)},</p><p>Escribe este código en <b>Mi perfil</b> para confirmar que este correo es tuyo:</p>
+        <p style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#7a2e55;margin:16px 0">${codigo}</p>
+        <p>Vence en <b>${minutos} minutos</b>. Si no lo pediste, ignora este correo.</p>`
+    }),
+
   registroRecibido: (para, nombre) =>
     enviarSinFallar({
       para,

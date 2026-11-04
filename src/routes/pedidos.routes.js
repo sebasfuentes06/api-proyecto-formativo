@@ -1,7 +1,7 @@
 import { Router } from "express";
 import controlador from "../controllers/pedidos.controller.js";
 import { validarId } from "../middlewares/validar.js";
-import { permitir } from "../middlewares/auth.js";
+import { permitir, exigirPermiso } from "../middlewares/auth.js";
 
 /**
  * Rutas de Pedidos. La sesión se exige en routes/index.js.
@@ -10,13 +10,13 @@ import { permitir } from "../middlewares/auth.js";
  */
 const router = Router();
 
-router.get("/", controlador.listar);
-router.get("/:id", validarId, controlador.obtener);
-router.post("/", controlador.crear);
-router.put("/:id", validarId, controlador.actualizar);
-router.post("/:id/cancelar", validarId, controlador.cancelar);
+router.get("/", exigirPermiso("orders.view"), controlador.listar);
+router.get("/:id", exigirPermiso("orders.view"), validarId, controlador.obtener);
+router.post("/", exigirPermiso("orders.create"), controlador.crear);
+router.put("/:id", exigirPermiso("orders.edit"), validarId, controlador.actualizar);
+router.post("/:id/cancelar", exigirPermiso("orders.cancel", "orders.edit", "orders.delete"), validarId, controlador.cancelar);
 router.get("/:id/comprobante", validarId, controlador.verComprobante);
 router.put("/:id/comprobante", validarId, controlador.subirComprobante);
-router.post("/:id/convertir", permitir("Administrador", "Vendedor"), validarId, controlador.convertir);
+router.post("/:id/convertir", permitir("Administrador", "Vendedor"), exigirPermiso("orders.convert"), validarId, controlador.convertir);
 
 export default router;

@@ -6,6 +6,7 @@ import { query, transaccion } from "../db/pool.js";
 import { correos, correoConfigurado, bandejaPrueba } from "../services/correo.service.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { validarPersona, PATRON_CORREO } from "../validaciones/persona.js";
+import { permisosEfectivos } from "../config/permisos.js";
 
 /**
  * Autenticación de la app móvil.
@@ -23,11 +24,14 @@ function firmar(usuario) {
   );
 }
 
-const publico = ({ id_usuario, nombre, correo, rol, id_cliente, telefono, created_at, ultimo_acceso }) => ({
+const publico = ({ id_usuario, nombre, correo, rol, id_cliente, telefono, created_at, ultimo_acceso, permisos, correo_verificado }) => ({
   id_usuario,
   nombre,
   correo,
   rol,
+  // Lo que puede hacer en la web/app: los permisos de su rol o los que le ajustó el Administrador.
+  permisos: permisosEfectivos(rol, permisos),
+  correo_verificado: correo_verificado === true,
   id_cliente: id_cliente ?? null,
   telefono: telefono ?? null,
   creado_en: created_at ?? null,
@@ -317,5 +321,78 @@ const ultimoCorreoPrueba = (req, res) => {
   res.json({ ok: true, datos: correo ?? null });
 };
 
+/**
+ * Verificación del correo (desde Mi perfil).
+ * POST /api/auth/verificar-correo/enviar  -> manda un código de 6 dígitos.
+ * POST /api/auth/verificar-correo  { codigo } -> lo confirma.
+ */
+const enviarVerificacion = asyncHandler(async (req, res) => {
+  if (!correoConfigurado()) throw new ErrorHttp(503, "El envío de correos no está configurado en el servidor.");
+  const { rows } = await query("SELECT id_usuario, nombre, correo, correo_verificado FROM usuarios WHERE id_usuario = $1 AND estado", [req.usuario.id]);
+  const u = rows[0];
+  if (!u) throw new ErrorHttp(401, "Sesión no válida.");
+  if (u.correo_verificado) return res.json({ ok: true, mensaje: "Tu correo ya está verificado.", datos: { verificado: true } });
+
+  const { rows: reciente } = await query(
+    `SELECT 1 FROM codigos_verificacion WHERE id_usuario = $1 AND creado_en > CURRENT_TIMESTAMP - make_interval(secs => $2)`,
+    [u.id_usuario, ESPERA_REENVIO_SEG]
+  );
+  if (reciente[0]) throw new ErrorHttp(429, "Espera un minuto antes de pedir otro código.");
+
+  const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  await transaccion(async (db) => {
+    await db.query("UPDATE codigos_verificacion SET usado_en = CURRENT_TIMESTAMP WHERE id_usuario = $1 AND usado_en IS NULL", [u.id_usuario]);
+    await db.query(
+      `INSERT INTO codigos_verificacion (id_usuario, correo, codigo_hash, expira_en)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP + make_interval(mins => $4))`,
+      [u.id_usuario, u.correo, hashCodigo(codigo), MINUTOS_CODIGO]
+    );
+  });
+  try {
+    await correos.verificacion(u.correo, u.nombre, codigo, MINUTOS_CODIGO);
+  } catch (error) {
+    console.error("[correo] fallo al enviar la verificación:", error.message);
+    throw new ErrorHttp(502, "No se pudo enviar el correo. Intenta de nuevo en unos minutos.");
+  }
+  res.json({
+    ok: true,
+    mensaje: `Te enviamos un código a ${u.correo}. Revisa también la carpeta de spam.`,
+    datos: { minutos: MINUTOS_CODIGO, reenviar_en: ESPERA_REENVIO_SEG }
+  });
+});
+
+const confirmarVerificacion = asyncHandler(async (req, res) => {
+  const codigo = String(req.body?.codigo ?? "").trim();
+  if (!/^\d{6}$/.test(codigo)) throw new ErrorHttp(400, "El código tiene 6 números.", { codigo: "6 dígitos." });
+  const r = await transaccion(async (db) => {
+    const { rows } = await db.query(
+      `SELECT c.* FROM codigos_verificacion c JOIN usuarios u ON u.id_usuario = c.id_usuario
+        WHERE c.id_usuario = $1 AND c.correo = u.correo AND c.usado_en IS NULL AND c.expira_en > CURRENT_TIMESTAMP
+        ORDER BY c.creado_en DESC LIMIT 1 FOR UPDATE OF c`,
+      [req.usuario.id]
+    );
+    const registro = rows[0];
+    if (!registro) return { fallo: "vencido" };
+    if (registro.codigo_hash !== hashCodigo(codigo)) {
+      const intentos = registro.intentos + 1;
+      await db.query(
+        `UPDATE codigos_verificacion SET intentos = $2::INT, usado_en = CASE WHEN $2::INT >= $3::INT THEN CURRENT_TIMESTAMP END WHERE id_codigo = $1`,
+        [registro.id_codigo, intentos, MAX_INTENTOS]
+      );
+      return { fallo: intentos >= MAX_INTENTOS ? "agotado" : MAX_INTENTOS - intentos };
+    }
+    await db.query("UPDATE usuarios SET correo_verificado = TRUE, correo_verificado_en = CURRENT_TIMESTAMP WHERE id_usuario = $1", [req.usuario.id]);
+    await db.query("UPDATE codigos_verificacion SET usado_en = CURRENT_TIMESTAMP WHERE id_codigo = $1", [registro.id_codigo]);
+    return { fallo: null };
+  });
+  if (r.fallo === "vencido") throw new ErrorHttp(400, "El código no es válido o ya venció. Pide uno nuevo.");
+  if (r.fallo === "agotado") throw new ErrorHttp(400, "Demasiados intentos. Pide un código nuevo.");
+  if (r.fallo !== null) throw new ErrorHttp(400, `Código incorrecto. Te quedan ${r.fallo} intento(s).`);
+  const { rows } = await query("SELECT * FROM usuarios WHERE id_usuario = $1", [req.usuario.id]);
+  res.json({ ok: true, mensaje: "¡Listo! Tu correo quedó verificado.", datos: publico(rows[0]) });
+});
+
 export default {
+  enviarVerificacion,
+  confirmarVerificacion,
   actualizarPerfil, login, yo, cambiarPassword, registro, olvide, restablecer, ultimoCorreoPrueba };

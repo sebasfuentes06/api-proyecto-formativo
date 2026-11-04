@@ -1,6 +1,7 @@
 import modelo from "../models/productos.model.js";
 import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { respuestaListado } from "../utils/consulta.js";
+import { query } from "../db/pool.js";
 
 /**
  * Controlador de Productos.
@@ -55,7 +56,30 @@ const actualizar = asyncHandler(async (req, res) => {
 });
 
 /** DELETE /api/productos/:id */
+const TABLAS_USO = new Set(["detalle_pedido", "detalle_venta", "detalle_compra"]);
+
+/** Cuántas filas de `tabla` usan este producto (0 si la tabla no existe). */
+async function usos(tabla, id) {
+  if (!TABLAS_USO.has(tabla)) return 0;
+  const { rows: t } = await query("SELECT to_regclass($1) AS t", [tabla]);
+  if (!t[0].t) return 0;
+  const { rows } = await query(`SELECT COUNT(*)::int AS n FROM ${tabla} WHERE id_producto = $1`, [id]);
+  return rows[0].n;
+}
+
 const eliminar = asyncHandler(async (req, res) => {
+  const pedidos = await usos("detalle_pedido", req.idNumerico);
+  if (pedidos > 0) {
+    throw new ErrorHttp(409, `No se puede eliminar: el producto ya está relacionado a un pedido. Desactívalo en lugar de borrarlo.`);
+  }
+  const ventas = await usos("detalle_venta", req.idNumerico);
+  if (ventas > 0) {
+    throw new ErrorHttp(409, `No se puede eliminar: el producto ya está relacionado a ${ventas} venta(s). Desactívalo en lugar de borrarlo.`);
+  }
+  const compras = await usos("detalle_compra", req.idNumerico);
+  if (compras > 0) {
+    throw new ErrorHttp(409, `No se puede eliminar: el producto ya está relacionado a ${compras} compra(s). Desactívalo en lugar de borrarlo.`);
+  }
   const producto = await modelo.eliminar(req.idNumerico);
   if (!producto) throw new ErrorHttp(404, "No existe un producto con ese id.");
   res.json({ ok: true, mensaje: "Producto eliminado.", datos: producto });

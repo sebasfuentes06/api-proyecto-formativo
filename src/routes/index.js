@@ -12,7 +12,8 @@ import ventas from "./ventas.routes.js";
 import pagos from "./pagos.routes.js";
 import usuarios from "./usuarios.routes.js";
 import compras from "./compras.routes.js";
-import { requiereSesion, permitir, rolesSiHaySesion } from "../middlewares/auth.js";
+import { requiereSesion, permitir, exigirPermiso, permisoSiHaySesion } from "../middlewares/auth.js";
+import { verificarToken } from "../middlewares/auth.js";
 import { ErrorHttp } from "../middlewares/errores.js";
 import { validarId } from "../middlewares/validar.js";
 import cuentas from "../controllers/cuentas.controller.js";
@@ -109,8 +110,8 @@ router.use("/auth", auth);
 // La imagen se consulta sin sesión (se usa en <img> y al compartir por
 // WhatsApp); subirla o borrarla sí exige sesión.
 router.get("/productos/:id/imagen", validarId, imagenes.obtener);
-router.put("/productos/:id/imagen", requiereSesion, permitir("Administrador"), validarId, imagenes.guardar);
-router.delete("/productos/:id/imagen", requiereSesion, permitir("Administrador"), validarId, imagenes.eliminar);
+router.put("/productos/:id/imagen", requiereSesion, exigirPermiso("products.edit", "products.create"), validarId, imagenes.guardar);
+router.delete("/productos/:id/imagen", requiereSesion, exigirPermiso("products.edit"), validarId, imagenes.eliminar);
 
 router.get("/clientes/:id/historial", requiereSesion, validarId, cuentas.historial);
 router.get("/clientes/:id/estado-cuenta", requiereSesion, validarId, cuentas.estadoCuenta);
@@ -119,39 +120,42 @@ router.use("/pedidos", requiereSesion, pedidos);
 router.use("/ventas", requiereSesion, ventas);
 router.use("/pagos", requiereSesion, pagos);
 router.get("/dashboard/resumen", requiereSesion, permitir("Administrador", "Vendedor"), dashboard.resumen);
-router.use("/usuarios", requiereSesion, permitir("Administrador"), usuarios);
+router.use("/usuarios", requiereSesion, permitir("Administrador", "Vendedor"), usuarios);
 router.use("/compras", requiereSesion, permitir("Administrador", "Vendedor"), compras);
 
 // Lo llama Wompi: no lleva sesión, lleva firma (se verifica adentro).
 router.post("/webhooks/wompi", pagosControlador.wompiWebhook);
 
 // --- CRUD base del proyecto formativo ---------------------------
-// Sin token siguen abiertas (panel web y pruebas del CRUD). Con token (la
-// app), se aplican los roles:
-//   catálogo (categorías, proveedores, productos): leen todos, escribe el Administrador
-//   clientes: el equipo los ve, crea y edita; activar/desactivar y borrar es del Administrador
-const escribeSolo = (...roles) => (req, res, next) =>
-  req.method === "GET" ? next() : rolesSiHaySesion(...roles)(req, res, next);
-
+// Sin token siguen abiertas (panel web y pruebas del CRUD). Con token se
+// exigen los permisos de la persona (los de su rol o los que le ajustó el
+// Administrador): crear, editar o eliminar en cada módulo.
 function reglasClientes(req, res, next) {
-  const metodo = req.method;
-  const reglas = metodo === "DELETE" ? ["Administrador"] : ["Administrador", "Vendedor"];
-  rolesSiHaySesion(...reglas)(req, res, (error) => {
-    if (error) {
-      // Un Cliente sí puede leer su propia ficha.
-      const propia = metodo === "GET" && req.usuario?.rol === "Cliente" && req.path === `/${req.usuario.idCliente}`;
-      return propia ? next() : next(error);
-    }
-    if (req.usuario?.rol === "Vendedor" && metodo !== "GET" && req.body?.estado !== undefined) {
-      return next(new ErrorHttp(403, "Solo el Administrador puede activar o desactivar clientes."));
-    }
-    next();
-  });
+  const token = (req.headers.authorization ?? "").split(" ")[1];
+  if (!token) return next();
+  try {
+    req.usuario = verificarToken(token);
+  } catch (error) {
+    return next(error);
+  }
+  if (req.usuario.rol === "Cliente") {
+    // Un Cliente solo puede leer su propia ficha.
+    const propia = req.method === "GET" && req.path === `/${req.usuario.idCliente}`;
+    return propia ? next() : next(new ErrorHttp(403, "Tu rol (Cliente) no tiene permiso para esta acción."));
+  }
+  const accion = { GET: "view", POST: "create", DELETE: "delete" }[req.method] ?? "edit";
+  if (accion === "edit" && req.body?.estado !== undefined) {
+    // Activar o desactivar un cliente es un permiso aparte.
+    return exigirPermiso("customers.toggle")(req, res, (error) =>
+      error ? next(error) : Object.keys(req.body).length > 1 ? exigirPermiso("customers.edit")(req, res, next) : next()
+    );
+  }
+  return exigirPermiso(`customers.${accion}`)(req, res, next);
 }
 
-router.use("/categorias", escribeSolo("Administrador"), categorias);
-router.use("/proveedores", escribeSolo("Administrador"), proveedores);
+router.use("/categorias", permisoSiHaySesion("categories"), categorias);
+router.use("/proveedores", permisoSiHaySesion("suppliers", { toggle: true }), proveedores);
 router.use("/clientes", reglasClientes, clientes);
-router.use("/productos", escribeSolo("Administrador"), productos);
+router.use("/productos", permisoSiHaySesion("products"), productos);
 
 export default router;

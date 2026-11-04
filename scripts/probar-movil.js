@@ -367,6 +367,31 @@ async function main() {
   r = await como(tV, "GET", "/api/dashboard/resumen");
   comprobar("el resumen del Vendedor es solo de sus ventas", r.cuerpo?.datos?.alcance === "mis_ventas" && Number(r.cuerpo?.datos?.ventas_hoy) === 100000, r.cuerpo?.datos);
 
+  // --- Permisos por usuario
+  r = await pedir("GET", `/api/usuarios?search=vendedor${marca}`);
+  const usuV = r.cuerpo?.datos?.find((u) => u.id_usuario === idVendedor);
+  comprobar("el usuario trae sus permisos efectivos (los del rol)", usuV?.permisos_personalizados === false && usuV?.permisos?.includes("sales.create"), usuV);
+  const permisosV = usuV?.permisos ?? [];
+  r = await pedir("PUT", `/api/usuarios/${idVendedor}`, { permisos: ["permiso.inventado"] });
+  comprobar("permiso inexistente: 400", r.estado === 400, r.cuerpo);
+  r = await pedir("PUT", `/api/usuarios/${idVendedor}`, { permisos: [...permisosV.filter((x) => x !== "sales.create"), "products.edit"] });
+  comprobar("el Administrador quita y da permisos a una persona", r.estado === 200 && r.cuerpo?.datos?.permisos_personalizados === true
+    && !r.cuerpo.datos.permisos.includes("sales.create") && r.cuerpo.datos.permisos.includes("products.edit"), r.cuerpo?.datos);
+  r = await como(tV, "GET", "/api/auth/yo");
+  comprobar("la sesión del Vendedor ya trae los permisos nuevos", r.cuerpo?.datos?.permisos?.includes("products.edit") && !r.cuerpo?.datos?.permisos?.includes("sales.create"), r.cuerpo?.datos);
+  r = await como(tV, "POST", "/api/ventas", { id_cliente: idCliente, metodo_pago: "efectivo", items: [{ id_producto: pA.id_producto, cantidad: 1 }] });
+  comprobar("sin el permiso, el Vendedor ya no registra ventas (403)", r.estado === 403 && /permiso/i.test(r.cuerpo?.error ?? ""), r.cuerpo);
+  r = await como(tV, "PUT", `/api/productos/${pA.id_producto}`, { descripcion: pA.descripcion ?? "Prueba" });
+  comprobar("con el permiso nuevo, el Vendedor edita productos", r.estado === 200, r.cuerpo);
+  r = await como(tV, "PUT", `/api/usuarios/${idUsuarioCliente}`, { permisos: [] });
+  comprobar("solo el Administrador asigna permisos (403)", r.estado === 403);
+  r = await pedir("PUT", `/api/usuarios/${idUsuarioCliente}`, { permisos: ["users.view"] });
+  comprobar("a un Cliente no se le dan permisos del negocio", r.estado === 200 && !r.cuerpo?.datos?.permisos?.includes("users.view"), r.cuerpo?.datos);
+  r = await pedir("PUT", `/api/usuarios/${idVendedor}`, { permisos: null });
+  comprobar("volver a los permisos del rol", r.estado === 200 && r.cuerpo?.datos?.permisos_personalizados === false && r.cuerpo?.datos?.permisos?.includes("sales.create"));
+  r = await como(tV, "PUT", `/api/productos/${pA.id_producto}`, { precio: 1 });
+  comprobar("de nuevo sin editar el catálogo (403)", r.estado === 403);
+
   // --- Cliente
   r = await como(tC, "GET", "/api/clientes");
   comprobar("Cliente no ve la lista de clientes (403)", r.estado === 403);
@@ -578,6 +603,22 @@ async function main() {
     comprobar("el mismo código no sirve dos veces", r.estado === 400);
     r = await pedir("POST", "/api/auth/login", { correo: correoReg, password: "NuevaClave123" }, { sinToken: true });
     comprobar("entra con la contraseña nueva", r.estado === 200);
+
+    // Verificación del correo desde Mi perfil
+    const tReg = (await pedir("POST", "/api/auth/login", { correo: correoReg, password: "NuevaClave123" }, { sinToken: true })).cuerpo?.datos?.token;
+    r = await como(tReg, "GET", "/api/auth/yo");
+    comprobar("el correo empieza sin verificar", r.cuerpo?.datos?.correo_verificado === false, r.cuerpo?.datos);
+    r = await como(tReg, "POST", "/api/auth/verificar-correo/enviar", {});
+    comprobar("pedir código de verificación: 200", r.estado === 200, r.cuerpo);
+    r = await como(tReg, "POST", "/api/auth/verificar-correo/enviar", {});
+    comprobar("pedir otro de inmediato: 429", r.estado === 429);
+    const cv = (await pedir("GET", `/api/auth/prueba/ultimo-correo?para=${correoReg}`, null, { sinToken: true })).cuerpo?.datos?.texto?.match(/\b(\d{6})\b/)?.[1];
+    r = await como(tReg, "POST", "/api/auth/verificar-correo", { codigo: cv === "000000" ? "111111" : "000000" });
+    comprobar("código de verificación incorrecto: 400", r.estado === 400);
+    r = await como(tReg, "POST", "/api/auth/verificar-correo", { codigo: cv });
+    comprobar("código correcto verifica el correo", r.estado === 200 && r.cuerpo?.datos?.correo_verificado === true, r.cuerpo);
+    r = await como(tReg, "POST", "/api/auth/verificar-correo/enviar", {});
+    comprobar("si ya está verificado no manda otro", r.estado === 200 && /ya/i.test(r.cuerpo?.mensaje ?? ""), r.cuerpo);
   } else {
     console.log("  (flujo completo del código omitido: solo corre en local con CORREO_MODO=prueba)");
   }

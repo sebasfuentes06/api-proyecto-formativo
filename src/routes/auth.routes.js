@@ -13,5 +13,7 @@ router.get("/prueba/ultimo-correo", controlador.ultimoCorreoPrueba);
 router.get("/yo", requiereSesion, controlador.yo);
 router.put("/password", requiereSesion, controlador.cambiarPassword);
 router.put("/perfil", requiereSesion, controlador.actualizarPerfil);
+router.post("/verificar-correo/enviar", requiereSesion, controlador.enviarVerificacion);
+router.post("/verificar-correo", requiereSesion, controlador.confirmarVerificacion);
 
 export default router;

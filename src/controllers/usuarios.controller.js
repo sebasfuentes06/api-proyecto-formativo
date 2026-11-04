@@ -4,6 +4,7 @@ import { ErrorHttp, asyncHandler } from "../middlewares/errores.js";
 import { ROLES } from "../middlewares/auth.js";
 import { paginacion, respuestaListado } from "../utils/consulta.js";
 import { correos } from "../services/correo.service.js";
+import { TODOS, asignablesPara, permisosEfectivos } from "../config/permisos.js";
 
 /**
  * Gestión de usuarios de la app (solo Administrador).
@@ -25,14 +26,37 @@ const PATRON_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SELECT_BASE = `
   SELECT u.id_usuario, u.nombre, u.correo, u.rol, u.estado, u.id_cliente,
          u.ultimo_acceso, u.created_at, u.aprobacion, u.telefono, u.motivo_rechazo, u.revisado_en,
+         u.permisos, u.correo_verificado,
          c.nombre AS cliente
     FROM usuarios u
     LEFT JOIN clientes c ON c.id_cliente = u.id_cliente
 `;
 
+/** Agrega los permisos que de verdad tiene (los del rol o los ajustados). */
+const conPermisos = (u) => u && { ...u, permisos_personalizados: Array.isArray(u.permisos), permisos: permisosEfectivos(u.rol, u.permisos) };
+
+/**
+ * Permisos ajustados a mano para una persona. null = los de su rol.
+ * Solo se aceptan los que su rol puede tener.
+ */
+function leerPermisos(rol, permisos) {
+  if (permisos === undefined) return undefined;
+  if (permisos === null || rol === "Administrador" || rol === "Cliente") return null;
+  if (!Array.isArray(permisos)) throw new ErrorHttp(400, "Los permisos deben ser una lista.", { permisos: "Lista." });
+  const desconocidos = permisos.filter((p) => !TODOS.includes(p));
+  if (desconocidos.length) throw new ErrorHttp(400, `Permisos no válidos: ${desconocidos.join(", ")}.`, { permisos: "No válidos." });
+  const validos = asignablesPara(rol);
+  return [...new Set(permisos.filter((p) => validos.includes(p)))];
+}
+
+/** Lo que solo puede hacer un Administrador dentro del módulo de usuarios. */
+function soloAdministrador(req, mensaje) {
+  if (req.usuario?.rol !== "Administrador") throw new ErrorHttp(403, mensaje);
+}
+
 async function obtener(id) {
   const { rows } = await query(`${SELECT_BASE} WHERE u.id_usuario = $1`, [id]);
-  return rows[0] ?? null;
+  return conPermisos(rows[0] ?? null);
 }
 
 /** Revisa rol / cliente enlazado. Devuelve el id_cliente que se debe guardar. */
@@ -82,7 +106,7 @@ const listar = asyncHandler(async (req, res) => {
      LIMIT $${valores.length + 1} OFFSET $${valores.length + 2}`,
     [...valores, porPagina, offset]
   );
-  res.json(respuestaListado(rows, t[0].total, { pagina, porPagina }));
+  res.json(respuestaListado(rows.map(conPermisos), t[0].total, { pagina, porPagina }));
 });
 
 /** POST /api/usuarios  { nombre, correo, password, rol, id_cliente? } */
@@ -95,14 +119,17 @@ const crear = asyncHandler(async (req, res) => {
   if (!PATRON_CORREO.test(correo)) errores.correo = "Correo no válido.";
   if (password.length < 8) errores.password = "Mínimo 8 caracteres.";
   if (Object.keys(errores).length) throw new ErrorHttp(400, "Revisa los datos enviados.", errores);
+  if (req.body.rol === "Administrador") soloAdministrador(req, "Solo un Administrador puede crear otro Administrador.");
+  if (req.body.permisos !== undefined && req.body.permisos !== null) soloAdministrador(req, "Solo un Administrador asigna permisos.");
+  const permisos = leerPermisos(req.body.rol, req.body.permisos) ?? null;
 
   const id = await transaccion(async (db) => {
     const idCliente = await validarRolYCliente(db, req.body);
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await db.query(
-      `INSERT INTO usuarios (nombre, correo, password_hash, rol, id_cliente)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id_usuario`,
-      [nombre, correo, hash, req.body.rol, idCliente]
+      `INSERT INTO usuarios (nombre, correo, password_hash, rol, id_cliente, permisos)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_usuario`,
+      [nombre, correo, hash, req.body.rol, idCliente, permisos]
     );
     return rows[0].id_usuario;
   });
@@ -118,6 +145,10 @@ const actualizar = asyncHandler(async (req, res) => {
     const { rows } = await db.query("SELECT * FROM usuarios WHERE id_usuario = $1 FOR UPDATE", [req.idNumerico]);
     const actual = rows[0];
     if (!actual) throw new ErrorHttp(404, "No existe ese usuario.");
+    if (actual.rol === "Administrador" || req.body.rol === "Administrador") {
+      soloAdministrador(req, "Solo un Administrador puede modificar cuentas de Administrador.");
+    }
+    if (req.body.permisos !== undefined) soloAdministrador(req, "Solo un Administrador asigna permisos.");
 
     const nuevo = {
       nombre: req.body.nombre !== undefined ? String(req.body.nombre).trim() : actual.nombre,
@@ -133,6 +164,9 @@ const actualizar = asyncHandler(async (req, res) => {
       throw new ErrorHttp(409, "Esta cuenta es una solicitud de registro: apruébala con el botón Aprobar.");
     }
     const idCliente = await validarRolYCliente(db, nuevo, actual.id_usuario);
+    // Si cambia el rol y no mandan permisos, vuelve a los de su nuevo rol.
+    let permisos = leerPermisos(nuevo.rol, req.body.permisos);
+    if (permisos === undefined) permisos = nuevo.rol === actual.rol ? actual.permisos : null;
 
     const dejaDeSerAdminActivo =
       actual.rol === "Administrador" && actual.estado && (nuevo.rol !== "Administrador" || !nuevo.estado);
@@ -147,8 +181,10 @@ const actualizar = asyncHandler(async (req, res) => {
     }
 
     await db.query(
-      `UPDATE usuarios SET nombre = $2, correo = $3, rol = $4, estado = $5, id_cliente = $6 WHERE id_usuario = $1`,
-      [actual.id_usuario, nuevo.nombre, nuevo.correo, nuevo.rol, nuevo.estado, idCliente]
+      `UPDATE usuarios SET nombre = $2, correo = $3::varchar, rol = $4, estado = $5, id_cliente = $6, permisos = $7,
+              correo_verificado = CASE WHEN correo = $3::varchar THEN correo_verificado ELSE FALSE END
+        WHERE id_usuario = $1`,
+      [actual.id_usuario, nuevo.nombre, nuevo.correo, nuevo.rol, nuevo.estado, idCliente, nuevo.rol === "Administrador" ? null : permisos]
     );
   });
   res.json({ ok: true, mensaje: "Usuario actualizado.", datos: await obtener(req.idNumerico) });
@@ -158,6 +194,8 @@ const actualizar = asyncHandler(async (req, res) => {
 const restablecerPassword = asyncHandler(async (req, res) => {
   const nueva = String(req.body.nueva ?? "");
   if (nueva.length < 8) throw new ErrorHttp(400, "La contraseña debe tener al menos 8 caracteres.", { nueva: "Mínimo 8." });
+  const { rows: u } = await query("SELECT rol FROM usuarios WHERE id_usuario = $1", [req.idNumerico]);
+  if (u[0]?.rol === "Administrador") soloAdministrador(req, "Solo un Administrador puede cambiar la clave de otro Administrador.");
   const hash = await bcrypt.hash(nueva, 10);
   const { rowCount } = await query("UPDATE usuarios SET password_hash = $2 WHERE id_usuario = $1", [req.idNumerico, hash]);
   if (!rowCount) throw new ErrorHttp(404, "No existe ese usuario.");
@@ -171,6 +209,7 @@ const restablecerPassword = asyncHandler(async (req, res) => {
 const aprobar = asyncHandler(async (req, res) => {
   const rol = req.body?.rol ?? "Cliente";
   if (!ROLES.includes(rol)) throw new ErrorHttp(400, "Rol no válido.", { rol: ROLES.join(", ") });
+  if (rol === "Administrador") soloAdministrador(req, "Solo un Administrador puede aprobar a alguien como Administrador.");
 
   const usuario = await transaccion(async (db) => {
     const { rows } = await db.query("SELECT * FROM usuarios WHERE id_usuario = $1 FOR UPDATE", [req.idNumerico]);

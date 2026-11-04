@@ -1,7 +1,7 @@
 import { Router } from "express";
 import controlador from "../controllers/ventas.controller.js";
 import { validarId } from "../middlewares/validar.js";
-import { permitir } from "../middlewares/auth.js";
+import { permitir, exigirPermiso } from "../middlewares/auth.js";
 
 /**
  * Rutas de Ventas. La sesión se exige en routes/index.js.
@@ -10,9 +10,9 @@ import { permitir } from "../middlewares/auth.js";
  */
 const router = Router();
 
-router.get("/", controlador.listar);
-router.get("/:id", validarId, controlador.obtener);
-router.post("/", permitir("Administrador", "Vendedor"), controlador.crear);
-router.post("/:id/anular", permitir("Administrador"), validarId, controlador.anular);
+router.get("/", exigirPermiso("sales.view", "payments.own"), controlador.listar);
+router.get("/:id", exigirPermiso("sales.view", "payments.own"), validarId, controlador.obtener);
+router.post("/", permitir("Administrador", "Vendedor"), exigirPermiso("sales.create"), controlador.crear);
+router.post("/:id/anular", permitir("Administrador", "Vendedor"), exigirPermiso("sales.cancel"), validarId, controlador.anular);
 
 export default router;
