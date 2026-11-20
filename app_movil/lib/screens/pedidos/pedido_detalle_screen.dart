@@ -7,6 +7,7 @@ import '../../core/eventos.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
+import '../../pdf/documentos_pdf.dart';
 import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
 import '../pagos/pago_detalle.dart';
@@ -137,13 +138,18 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       appBar: AppBar(
         title: Text(p.codigo),
         actions: [
-          if (p.pendiente)
+          IconButton(
+            tooltip: 'Descargar PDF',
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            onPressed: () => conCarga(context, compartirPedidoPdf(p), avisarCambio: false),
+          ),
+          if (p.pendiente && Sesion.i.puede('orders.edit'))
             IconButton(
               tooltip: 'Editar',
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoFormScreen(pedido: p))),
             ),
-          if (p.pendiente)
+          if (p.pendiente && Sesion.i.puedeAlguno(['orders.cancel', 'orders.edit', 'orders.delete']))
             PopupMenuButton<String>(
               onSelected: (v) => v == 'cancelar' ? _cancelar() : null,
               itemBuilder: (_) => const [PopupMenuItem(value: 'cancelar', child: Text('Cancelar pedido'))],
@@ -154,7 +160,7 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           // Convertir en venta es del equipo; el cliente solo ve el estado.
-          child: p.pendiente && Sesion.i.esEquipo
+          child: p.pendiente && Sesion.i.esEquipo && Sesion.i.puede('orders.convert')
               ? FilledButton.icon(
                   onPressed: _convertir,
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
@@ -353,7 +359,7 @@ class _HojaCierreState extends State<_HojaCierre> {
                 onChanged: (v) => setState(() => _registrarPago = v),
               ),
               if (_registrarPago)
-                CamposPago(key: ValueKey('$_total|$_metodo'), datos: _pago, maximo: _total < 0 ? 0.0 : _total),
+                CamposPago(key: ValueKey('$_total|$_metodo'), datos: _pago, maximo: _total < 0 ? 0.0 : _total, metodos: metodosPagoInicial),
             ] else
               const Padding(
                 padding: EdgeInsets.only(top: 8),

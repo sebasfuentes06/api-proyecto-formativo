@@ -4,7 +4,9 @@ import '../../core/api.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
+import '../../core/permisos.dart';
 import '../../widgets/comunes.dart';
+import '../../widgets/selector_permisos.dart';
 import '../../widgets/selectores.dart';
 
 /// Crear o editar un usuario de la app y su rol (solo Administrador).
@@ -34,6 +36,11 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
   late int? _idCliente = widget.usuario?.idCliente ?? widget.clienteInicial?.id;
   late String? _nombreCliente = widget.usuario?.cliente ?? widget.clienteInicial?.nombre;
   bool _verClave = false;
+
+  /// null = los del rol; lista = permisos personalizados (solo Vendedor).
+  late List<String>? _permisos = (widget.usuario?.permisosPersonalizados ?? false)
+      ? widget.usuario!.permisos.where(permisosAsignables(widget.usuario!.rol).contains).toList()
+      : null;
 
   bool get _editando => widget.usuario != null;
 
@@ -73,6 +80,8 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
       'id_cliente': _rol == Rol.cliente ? _idCliente : null,
       if (_editando) 'estado': _estado,
       if (!_editando) 'password': _clave.text,
+      // Los permisos solo los envía el Administrador (la API rechaza a los demás).
+      if (Sesion.i.esAdmin && _rol == Rol.vendedor && (_editando || _permisos != null)) 'permisos': _permisos,
     };
     final r = await conCarga(
       context,
@@ -190,8 +199,11 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     if (r != null && mounted) mostrarMensaje(context, r['mensaje'] ?? 'Contraseña restablecida.');
   }
 
+  /// La flecha de atrás pregunta antes de salir (lo escrito se perdería).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ProtegerSalida(child: _formulario(context));
+
+  Widget _formulario(BuildContext context) {
     const espacio = SizedBox(height: 14);
     return Scaffold(
       appBar: AppBar(title: Text(_esSolicitud ? 'Revisar solicitud' : (_editando ? 'Editar usuario' : 'Nuevo usuario'))),
@@ -208,7 +220,17 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
               ButtonSegment(value: Rol.cliente, label: Text('Cliente'), icon: Icon(Icons.person_outline)),
             ],
             selected: {_rol},
-            onSelectionChanged: (s) => setState(() => _rol = s.first),
+            // Solo un Administrador crea o asigna Administradores.
+            onSelectionChanged: (s) {
+              if (s.first == Rol.admin && !Sesion.i.esAdmin) {
+                mostrarMensaje(context, 'Solo un Administrador puede asignar el rol Administrador.', error: true);
+                return;
+              }
+              setState(() {
+                _rol = s.first;
+                _permisos = null;
+              });
+            },
           ),
           const SizedBox(height: 6),
           Text(
@@ -218,6 +240,13 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
               _ => 'Solo lo suyo: catálogo, sus pedidos, sus compras, su saldo y pago en línea.',
             },
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline),
+          ),
+          const SizedBox(height: 12),
+          SelectorPermisos(
+            rol: _rol,
+            valor: _permisos,
+            bloqueado: !Sesion.i.esAdmin || _soyYo,
+            onCambio: (v) => setState(() => _permisos = v),
           ),
           // En una solicitud la ficha ya existe (se creó al registrarse).
           if (_rol == Rol.cliente && !_esSolicitud) ...[

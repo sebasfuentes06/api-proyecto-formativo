@@ -94,6 +94,20 @@ class Api {
     );
   }
 
+  /// Trae TODAS las páginas de un listado (para exportar a PDF lo que se ve
+  /// con los filtros puestos). Tope de 20 páginas de 100 por seguridad.
+  Future<List<T>> todos<T>(String ruta, T Function(Map<String, dynamic>) desdeJson, {Map<String, dynamic>? query}) async {
+    final lista = <T>[];
+    var pagina = 1;
+    while (true) {
+      final p = await this.pagina(ruta, desdeJson, query: {...?query, 'page': pagina, 'limit': 100});
+      lista.addAll(p.items);
+      if (pagina >= p.totalPaginas || pagina >= 20) break;
+      pagina++;
+    }
+    return lista;
+  }
+
   Future<Map<String, dynamic>> _enviar(Future<http.Response> Function() peticion) async {
     http.Response respuesta;
     try {

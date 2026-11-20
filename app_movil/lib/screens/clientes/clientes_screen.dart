@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../core/api.dart';
 import '../../core/formato.dart';
 import '../../models/modelos.dart';
+import '../../core/sesion.dart';
+import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
+import '../../widgets/exportar.dart';
 import '../../widgets/perfil.dart';
 import 'cliente_detalle_screen.dart';
 import 'cliente_form_screen.dart';
@@ -20,19 +23,58 @@ class _ClientesScreenState extends State<ClientesScreen> {
   String _buscar = '';
   String _filtro = 'active';
   int _total = 0;
+  String _orden = 'nombre|asc';
+
+  Future<void> _exportar() async {
+    final filas = await Api.i.todos('/api/clientes', Cliente.desdeJson, query: _query);
+    await compartirListadoPdf<Cliente>(
+      titulo: 'clientes',
+      filas: filas,
+      columnas: [
+        ColumnaPdf('Nombre', (c) => c.nombre),
+        ColumnaPdf('Documento', (c) => c.documento == null ? null : '${c.tipoDocumento ?? ''} ${c.documento}'.trim()),
+        ColumnaPdf('Celular', (c) => c.telefono),
+        ColumnaPdf('Correo', (c) => c.correo),
+        ColumnaPdf('Municipio', (c) => c.ciudad),
+        ColumnaPdf('Compras', (c) => c.compras, numero: true),
+        ColumnaPdf('Saldo', (c) => c.saldoPendiente, dinero: true),
+        ColumnaPdf('Estado', (c) => c.estado ? 'Activo' : 'Inactivo'),
+      ],
+    );
+  }
 
   Map<String, dynamic> get _query => {
         'search': _buscar,
         'status': _filtro == 'deben' ? 'active' : _filtro,
         if (_filtro == 'deben') 'conSaldo': 1,
-        'sortBy': 'nombre',
+        'sortBy': _orden.split('|').first,
+        'sortDir': _orden.split('|').last,
       };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Clientes${_total > 0 ? ' ($_total)' : ''}'), actions: const [BotonPerfil()]),
-      floatingActionButton: FloatingActionButton.extended(
+      appBar: AppBar(
+        title: Text('Clientes${_total > 0 ? ' ($_total)' : ''}'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Ordenar',
+            icon: const Icon(Icons.sort),
+            initialValue: _orden,
+            onSelected: (v) => setState(() => _orden = v),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'nombre|asc', child: Text('Nombre (A-Z)')),
+              PopupMenuItem(value: 'nombre|desc', child: Text('Nombre (Z-A)')),
+              PopupMenuItem(value: 'fecha_registro|desc', child: Text('Más recientes')),
+            ],
+          ),
+          BotonPdf(exportar: _exportar),
+          const BotonPerfil(),
+        ],
+      ),
+      floatingActionButton: !Sesion.i.puede('customers.create')
+          ? null
+          : FloatingActionButton.extended(
         heroTag: 'fab_clientes',
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ClienteFormScreen())),
         icon: const Icon(Icons.person_add),
@@ -47,7 +89,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
         ),
         Expanded(
           child: ListaPaginada<Cliente>(
-            key: ValueKey('$_buscar|$_filtro'),
+            key: ValueKey('$_buscar|$_filtro|$_orden'),
             cargar: (p) => Api.i.pagina('/api/clientes', Cliente.desdeJson, query: {..._query, 'page': p, 'limit': 20}),
             alCargar: (p) {
               if (p.total != _total) setState(() => _total = p.total);

@@ -4,7 +4,9 @@ import '../../core/api.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
+import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
+import '../../widgets/exportar.dart';
 import 'usuario_form_screen.dart';
 
 /// Usuarios y roles (solo Administrador): quién entra a la app y con qué rol.
@@ -34,11 +36,30 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
   String _buscar = '';
   late String _rol = widget.soloPendientes ? 'pendientes' : '';
 
+  Future<void> _exportar() async {
+    final filas = await Api.i.todos('/api/usuarios', UsuarioApp.desdeJson,
+        query: {'search': _buscar, if (_rol == 'pendientes') 'aprobacion': 'pendiente' else 'rol': _rol});
+    await compartirListadoPdf<UsuarioApp>(
+      titulo: 'usuarios',
+      filas: filas,
+      columnas: [
+        ColumnaPdf('Nombre', (u) => u.nombre),
+        ColumnaPdf('Correo', (u) => u.correo),
+        ColumnaPdf('Rol', (u) => u.rol),
+        ColumnaPdf('Estado', (u) => u.pendiente ? 'Pendiente' : u.rechazado ? 'Rechazado' : u.estado ? 'Activo' : 'Inactivo'),
+        ColumnaPdf('Permisos', (u) => u.permisosPersonalizados ? 'Personalizados' : 'Los del rol'),
+        ColumnaPdf('Último acceso', (u) => u.ultimoAcceso),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Usuarios y roles')),
-      floatingActionButton: FloatingActionButton.extended(
+      appBar: AppBar(title: const Text('Usuarios'), actions: [BotonPdf(exportar: _exportar)]),
+      floatingActionButton: !Sesion.i.puede('users.create')
+          ? null
+          : FloatingActionButton.extended(
         heroTag: 'fab_usuarios',
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UsuarioFormScreen())),
         icon: const Icon(Icons.person_add_alt),

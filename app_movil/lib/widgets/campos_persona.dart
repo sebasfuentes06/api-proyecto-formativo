@@ -82,6 +82,202 @@ class Municipios {
   ];
 }
 
+/// Departamentos de Colombia y sus municipios, de la misma API pública que
+/// usa la web (API Colombia). Antioquia usa la lista de [Municipios], que
+/// tiene respaldo dentro de la app si no hay internet.
+class Departamentos {
+  Departamentos._();
+
+  static const _base = 'https://api-colombia.com/api/v1';
+  static List<({int id, String nombre})>? _cache;
+  static final _ciudades = <int, List<String>>{};
+
+  static Future<List<({int id, String nombre})>> cargar() async {
+    if (_cache != null) return _cache!;
+    try {
+      final r = await http.get(Uri.parse('$_base/Department'), headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 12));
+      if (r.statusCode == 200) {
+        final lista = (jsonDecode(utf8.decode(r.bodyBytes)) as List)
+            .map((m) => (id: ((m as Map<String, dynamic>)['id'] as num).toInt(), nombre: (m['name'] ?? '').toString().trim()))
+            .where((d) => d.nombre.isNotEmpty)
+            .toList()
+          ..sort((a, b) => _sinTildes(a.nombre).compareTo(_sinTildes(b.nombre)));
+        if (lista.length > 20) return _cache = lista;
+      }
+    } catch (_) {/* sin internet: solo Antioquia */}
+    return [(id: 2, nombre: 'Antioquia')];
+  }
+
+  /// Municipios de un departamento (por nombre).
+  static Future<List<String>> municipios(String departamento) async {
+    if (_igual(departamento, 'Antioquia')) return Municipios.cargar();
+    final deps = await cargar();
+    final dep = deps.where((d) => _igual(d.nombre, departamento)).firstOrNull;
+    if (dep == null) return const [];
+    if (_ciudades.containsKey(dep.id)) return _ciudades[dep.id]!;
+    try {
+      final r = await http.get(Uri.parse('$_base/Department/${dep.id}/cities'), headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 12));
+      if (r.statusCode == 200) {
+        final lista = (jsonDecode(utf8.decode(r.bodyBytes)) as List)
+            .map((m) => (m as Map<String, dynamic>)['name']?.toString().trim() ?? '')
+            .where((n) => n.isNotEmpty)
+            .toSet()
+            .toList();
+        return _ciudades[dep.id] = Municipios._ordenar(lista);
+      }
+    } catch (_) {/* sin internet: se escribe a mano */}
+    return const [];
+  }
+
+  static String _sinTildes(String s) => s
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp('[áà]'), 'a')
+      .replaceAll(RegExp('[éè]'), 'e')
+      .replaceAll(RegExp('[íì]'), 'i')
+      .replaceAll(RegExp('[óò]'), 'o')
+      .replaceAll(RegExp('[úùü]'), 'u');
+
+  static bool _igual(String a, String b) => _sinTildes(a) == _sinTildes(b);
+}
+
+/// Departamento + municipio (desplegables con buscador). Si no hay lista de
+/// municipios para el departamento (sin internet), el municipio se escribe.
+class CamposUbicacion extends StatefulWidget {
+  const CamposUbicacion({
+    super.key,
+    required this.departamento,
+    required this.municipio,
+    required this.onCambio,
+    this.requerido = true,
+    this.etiquetaMunicipio = 'Municipio',
+  });
+  final String? departamento, municipio;
+  final void Function(String departamento, String? municipio) onCambio;
+  final bool requerido;
+  final String etiquetaMunicipio;
+
+  @override
+  State<CamposUbicacion> createState() => _CamposUbicacionState();
+}
+
+class _CamposUbicacionState extends State<CamposUbicacion> {
+  List<String>? _departamentos;
+  List<String>? _municipios;
+  String? _cargadoPara;
+  final _manual = TextEditingController();
+
+  String get _dep => (widget.departamento ?? '').isEmpty ? 'Antioquia' : widget.departamento!;
+
+  @override
+  void initState() {
+    super.initState();
+    _manual.text = widget.municipio ?? '';
+    Departamentos.cargar().then((l) {
+      if (mounted) setState(() => _departamentos = [for (final d in l) d.nombre]);
+    });
+    _cargarMunicipios(inicial: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant CamposUbicacion old) {
+    super.didUpdateWidget(old);
+    if (old.departamento != widget.departamento) _cargarMunicipios();
+  }
+
+  @override
+  void dispose() {
+    _manual.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargarMunicipios({bool inicial = false}) async {
+    final dep = _dep;
+    if (_cargadoPara == dep) return;
+    // En initState no se llama setState (aún se está construyendo).
+    if (inicial) {
+      _municipios = null;
+    } else {
+      setState(() => _municipios = null);
+    }
+    final lista = await Departamentos.municipios(dep);
+    if (!mounted || dep != _dep) return;
+    setState(() {
+      _cargadoPara = dep;
+      final m = widget.municipio;
+      _municipios = [if (m != null && m.isNotEmpty && lista.isNotEmpty && !lista.contains(m)) m, ...lista];
+    });
+  }
+
+  Future<void> _elegirDepartamento() async {
+    final lista = _departamentos ?? ['Antioquia'];
+    final d = await elegirMunicipio(context, lista, actual: _dep, pista: 'Buscar departamento');
+    if (d != null && d != _dep) {
+      _manual.clear();
+      widget.onCambio(d, null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      InkWell(
+        onTap: _elegirDepartamento,
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Departamento${widget.requerido ? ' *' : ''}',
+            prefixIcon: const Icon(Icons.map_outlined),
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+          ),
+          child: Text(_dep),
+        ),
+      ),
+      const SizedBox(height: 14),
+      if (_municipios == null)
+        InputDecorator(
+          decoration: InputDecoration(labelText: '${widget.etiquetaMunicipio} *', prefixIcon: const Icon(Icons.location_city_outlined)),
+          child: const Row(children: [
+            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 10),
+            Text('Cargando municipios...'),
+          ]),
+        )
+      else if (_municipios!.isEmpty)
+        TextFormField(
+          controller: _manual,
+          decoration: InputDecoration(labelText: '${widget.etiquetaMunicipio}${widget.requerido ? ' *' : ''}', prefixIcon: const Icon(Icons.location_city_outlined)),
+          onChanged: (v) => widget.onCambio(_dep, v.trim()),
+          validator: (v) => widget.requerido && (v ?? '').trim().isEmpty ? 'Escribe el municipio' : null,
+        )
+      else
+        FormField<String>(
+          key: ValueKey('mun|$_dep'),
+          initialValue: widget.municipio,
+          validator: (v) => widget.requerido && (v == null || v.isEmpty) ? 'Elige el municipio' : null,
+          builder: (campo) => InkWell(
+            onTap: () async {
+              final elegido = await elegirMunicipio(context, _municipios!, actual: campo.value);
+              if (elegido != null) {
+                campo.didChange(elegido);
+                widget.onCambio(_dep, elegido);
+              }
+            },
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: '${widget.etiquetaMunicipio}${widget.requerido ? ' *' : ''}',
+                prefixIcon: const Icon(Icons.location_city_outlined),
+                suffixIcon: const Icon(Icons.arrow_drop_down),
+                errorText: campo.errorText,
+              ),
+              isEmpty: campo.value == null || campo.value!.isEmpty,
+              child: Text(campo.value ?? ''),
+            ),
+          ),
+        ),
+    ]);
+  }
+}
+
 /// Los datos de una persona, en el orden que pide la ficha. Lo usan el
 /// registro (Crear cuenta) y la ficha de cliente que llena el equipo.
 class DatosPersona {
@@ -90,6 +286,7 @@ class DatosPersona {
     this.tipoDocumento,
     String documento = '',
     String telefono = '',
+    this.departamento = 'Antioquia',
     this.municipio,
     String direccion = '',
     String correo = '',
@@ -103,6 +300,7 @@ class DatosPersona {
   String? tipoDocumento;
   final TextEditingController documento;
   final TextEditingController telefono;
+  String departamento;
   String? municipio;
   final TextEditingController direccion;
   final TextEditingController correo;
@@ -112,6 +310,7 @@ class DatosPersona {
         'tipo_documento': tipoDocumento,
         'documento': documento.text.trim(),
         'telefono': telefono.text.trim(),
+        'departamento': departamento,
         'ciudad': municipio,
         'direccion': direccion.text.trim(),
         'correo': correo.text.trim(),
@@ -169,35 +368,11 @@ class CamposPersona extends StatefulWidget {
 }
 
 class _CamposPersonaState extends State<CamposPersona> {
-  List<String>? _municipios;
-  bool _error = false;
-
   DatosPersona get d => widget.datos;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final lista = await Municipios.cargar();
-    if (!mounted) return;
-    setState(() {
-      // Si la ficha ya tenía una ciudad que no está en la lista (datos
-      // viejos), se agrega para no perderla al editar.
-      _municipios = [
-        if (d.municipio != null && d.municipio!.isNotEmpty && !lista.contains(d.municipio)) d.municipio!,
-        ...lista,
-      ];
-      _error = !Municipios.desdeApi;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     const espacio = SizedBox(height: 14);
-    final tema = Theme.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       TextFormField(
         controller: d.nombre,
@@ -246,50 +421,14 @@ class _CamposPersonaState extends State<CamposPersona> {
         validator: validarCelular,
       ),
       espacio,
-      if (_municipios == null)
-        const InputDecorator(
-          decoration: InputDecoration(labelText: 'Municipio (Antioquia) *', prefixIcon: Icon(Icons.location_city_outlined)),
-          child: Row(children: [
-            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-            SizedBox(width: 10),
-            Text('Cargando municipios...'),
-          ]),
-        )
-      else
-        FormField<String>(
-          initialValue: d.municipio,
-          validator: (v) => (v == null || v.isEmpty) ? 'Elige el municipio' : null,
-          builder: (campo) => InkWell(
-            onTap: () async {
-              final elegido = await elegirMunicipio(context, _municipios!, actual: campo.value);
-              if (elegido != null) {
-                campo.didChange(elegido);
-                setState(() => d.municipio = elegido);
-              }
-            },
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Municipio (Antioquia) *',
-                prefixIcon: const Icon(Icons.location_city_outlined),
-                suffixIcon: const Icon(Icons.arrow_drop_down),
-                errorText: campo.errorText,
-              ),
-              isEmpty: campo.value == null,
-              child: Text(campo.value ?? ''),
-            ),
-          ),
-        ),
-      if (_error)
-        Padding(
-          padding: const EdgeInsets.only(top: 4, left: 12),
-          child: Row(children: [
-            Expanded(
-              child: Text('Sin conexión con la API de municipios: se usa la lista guardada.',
-                  style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.outline)),
-            ),
-            TextButton(onPressed: _cargar, child: const Text('Reintentar')),
-          ]),
-        ),
+      CamposUbicacion(
+        departamento: d.departamento,
+        municipio: d.municipio,
+        onCambio: (dep, mun) => setState(() {
+          d.departamento = dep;
+          d.municipio = mun;
+        }),
+      ),
       espacio,
       TextFormField(
         controller: d.direccion,
@@ -314,19 +453,20 @@ class _CamposPersonaState extends State<CamposPersona> {
 
 /// Lista desplegable con buscador (son 125 municipios: sin buscar sería
 /// muy largo de recorrer).
-Future<String?> elegirMunicipio(BuildContext context, List<String> municipios, {String? actual}) {
+Future<String?> elegirMunicipio(BuildContext context, List<String> municipios, {String? actual, String pista = 'Buscar municipio'}) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (ctx) => _BuscadorMunicipio(municipios: municipios, actual: actual),
+    builder: (ctx) => _BuscadorMunicipio(municipios: municipios, actual: actual, pista: pista),
   );
 }
 
 class _BuscadorMunicipio extends StatefulWidget {
-  const _BuscadorMunicipio({required this.municipios, this.actual});
+  const _BuscadorMunicipio({required this.municipios, this.actual, this.pista = 'Buscar municipio'});
   final List<String> municipios;
   final String? actual;
+  final String pista;
 
   @override
   State<_BuscadorMunicipio> createState() => _BuscadorMunicipioState();
@@ -355,7 +495,7 @@ class _BuscadorMunicipioState extends State<_BuscadorMunicipio> {
           child: TextField(
             autofocus: true,
             decoration: InputDecoration(
-              hintText: 'Buscar municipio (${widget.municipios.length})',
+              hintText: '${widget.pista} (${widget.municipios.length})',
               prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (v) => setState(() => _filtro = v),
@@ -363,7 +503,7 @@ class _BuscadorMunicipioState extends State<_BuscadorMunicipio> {
         ),
         Expanded(
           child: lista.isEmpty
-              ? const Center(child: Text('No hay municipios con ese nombre'))
+              ? const Center(child: Text('No hay resultados con ese nombre'))
               : ListView.builder(
                   itemCount: lista.length,
                   itemBuilder: (_, i) => ListTile(

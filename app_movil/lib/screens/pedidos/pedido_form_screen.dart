@@ -5,6 +5,7 @@ import '../../core/carrito.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
+import '../../widgets/campos_persona.dart';
 import '../../widgets/carrito.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/selectores.dart';
@@ -34,12 +35,16 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   Cliente? _cliente;
   String _canal = 'whatsapp';
   final _lineas = <LineaCarrito>[];
-  late final _direccion = TextEditingController(text: widget.pedido?.direccionEntrega);
+  /// Dirección de entrega: calle/número/barrio + municipio + departamento
+  /// (se guarda junta en direccion_entrega: "Calle 1, Medellín, Antioquia").
+  late final _direccion = TextEditingController();
+  String _departamento = 'Antioquia';
+  String? _municipio;
   late final _notas = TextEditingController(text: widget.pedido?.notas);
   bool _cargandoEdicion = false;
 
-  /// Cómo va a pagar. Obligatorio para el Cliente (Wompi, transferencia o
-  /// efectivo en el punto físico); opcional para el equipo.
+  /// Cómo va a pagar: Wompi, transferencia o efectivo. Obligatorio para
+  /// todos (en la web el equipo también debe escogerlo).
   late String? _metodo = widget.pedido?.metodoPago;
 
   /// Comprobante de la transferencia (obligatorio para el Cliente que paga
@@ -74,7 +79,15 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       datosDePago().then((d) {
         if (mounted) setState(() => _datosPago = d);
       });
+      // La primera vez se llena con la dirección de su ficha (se puede cambiar).
+      if (!_editando && _cliente != null) {
+        Api.i.get('/api/clientes/${_cliente!.id}').then((r) {
+          if (mounted) _usarDireccionDe(Cliente.desdeJson(r['datos']));
+        }).catchError((_) {});
+      }
     }
+    if (_editando) _partirDireccion(widget.pedido!.direccionEntrega);
+    if (_cliente != null && !_editando && !Sesion.i.esCliente) _aplicarDireccion(_cliente!);
     if (_editando) {
       _cargandoEdicion = true;
       _prepararEdicion();
@@ -88,6 +101,29 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
     _referencia.dispose();
     super.dispose();
   }
+
+  /// "Calle 1 # 2-3, Medellín, Antioquia" -> dirección, municipio, departamento.
+  void _partirDireccion(String? texto) {
+    final partes = (texto ?? '').split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+    if (partes.length < 3) {
+      _direccion.text = partes.join(', ');
+      return;
+    }
+    _direccion.text = partes.sublist(0, partes.length - 2).join(', ');
+    _municipio = partes[partes.length - 2];
+    _departamento = partes.last;
+  }
+
+  void _aplicarDireccion(Cliente c) {
+    _direccion.text = c.direccion ?? '';
+    _municipio = c.ciudad;
+    _departamento = (c.departamento ?? '').isEmpty ? 'Antioquia' : c.departamento!;
+  }
+
+  void _usarDireccionDe(Cliente c) => setState(() => _aplicarDireccion(c));
+
+  String get _direccionCompleta =>
+      [_direccion.text.trim(), _municipio?.trim(), _departamento].whereType<String>().where((s) => s.isNotEmpty).join(', ');
 
   /// Para editar hace falta el Producto completo de cada línea (stock actual,
   /// foto), no solo lo que trae el detalle del pedido.
@@ -109,10 +145,8 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
   Future<void> _elegirCliente() async {
     final c = await elegirCliente(context);
     if (c == null || !mounted) return;
-    setState(() {
-      _cliente = c;
-      if (_direccion.text.isEmpty && c.direccion != null) _direccion.text = c.direccion!;
-    });
+    setState(() => _cliente = c);
+    _usarDireccionDe(c);
   }
 
   Future<void> _guardar() async {
@@ -124,8 +158,16 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       mostrarMensaje(context, 'Agrega al menos un producto.', error: true);
       return;
     }
-    if (Sesion.i.esCliente && _metodo == null) {
-      mostrarMensaje(context, 'Elige cómo vas a pagar tu pedido.', error: true);
+    if (_metodo == null) {
+      mostrarMensaje(context, Sesion.i.esCliente ? 'Elige cómo vas a pagar tu pedido.' : 'Seleccione método de pago.', error: true);
+      return;
+    }
+    if ((_municipio ?? '').trim().isEmpty) {
+      mostrarMensaje(context, 'Elige el departamento y el municipio de entrega.', error: true);
+      return;
+    }
+    if (_direccion.text.trim().isEmpty) {
+      mostrarMensaje(context, 'Escribe la dirección de entrega.', error: true);
       return;
     }
     if (_pideComprobante && _comprobante.comprobante == null && !_yaTieneComprobante) {
@@ -136,7 +178,7 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
       'id_cliente': _cliente!.id,
       if (_metodo != null) 'metodo_pago': _metodo,
       if (!Sesion.i.esCliente) 'canal': _canal,
-      'direccion_entrega': _direccion.text.trim(),
+      'direccion_entrega': _direccionCompleta.length > 150 ? _direccionCompleta.substring(0, 150) : _direccionCompleta,
       'notas': _notas.text.trim(),
       'items': _lineas.map((l) => l.aJson()).toList(),
       if (_pideComprobante && _comprobante.comprobante != null) ...{
@@ -201,8 +243,11 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
     );
   }
 
+  /// La flecha de atrás pregunta antes de salir (lo escrito se perdería).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ProtegerSalida(child: _formulario(context));
+
+  Widget _formulario(BuildContext context) {
     final tema = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(_editando ? 'Editar ${widget.pedido!.codigo}' : (Sesion.i.esCliente ? 'Hacer pedido' : 'Nuevo pedido'))),
@@ -257,7 +302,7 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
               const TituloSeccion('Productos'),
               // El cliente no cambia precios: los pone el catálogo.
               EditorCarrito(lineas: _lineas, onCambio: () => setState(() {}), editarPrecio: !Sesion.i.esCliente),
-              TituloSeccion(Sesion.i.esCliente ? '¿Cómo vas a pagar? *' : 'Forma de pago (opcional)'),
+              TituloSeccion(Sesion.i.esCliente ? '¿Cómo vas a pagar? *' : 'Forma de pago *'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Sesion.i.esCliente
@@ -282,14 +327,38 @@ class _PedidoFormScreenState extends State<PedidoFormScreen> {
                             ),
                           ),
                       ])
-                    : SelectorMetodo(valor: _metodo, onCambio: (m) => setState(() => _metodo = m)),
+                    : DropdownButtonFormField<String>(
+                        initialValue: metodosPedido.contains(_metodo) ? _metodo : null,
+                        isExpanded: true,
+                        hint: const Text('Seleccione método de pago'),
+                        decoration: const InputDecoration(prefixIcon: Icon(Icons.payments_outlined)),
+                        items: [
+                          for (final m in metodosPedido)
+                            DropdownMenuItem(value: m, child: Row(children: [Icon(iconoMetodo(m), size: 18), const SizedBox(width: 8), Text(nombresMetodo[m]!)])),
+                        ],
+                        onChanged: (m) => setState(() => _metodo = m),
+                      ),
               ),
               if (_pideComprobante) _seccionTransferencia(tema),
               const TituloSeccion('Entrega'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(children: [
-                  TextField(controller: _direccion, decoration: const InputDecoration(labelText: 'Dirección de entrega', prefixIcon: Icon(Icons.place_outlined))),
+                  CamposUbicacion(
+                    key: ValueKey('ubic|${_cliente?.id}|$_departamento'),
+                    departamento: _departamento,
+                    municipio: _municipio,
+                    onCambio: (d, m) => setState(() {
+                      _departamento = d;
+                      _municipio = m;
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _direccion,
+                    maxLength: 100,
+                    decoration: const InputDecoration(labelText: 'Dirección (calle, número, barrio) *', prefixIcon: Icon(Icons.place_outlined)),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _notas,

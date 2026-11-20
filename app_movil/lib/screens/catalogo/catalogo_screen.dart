@@ -5,7 +5,9 @@ import '../../core/eventos.dart';
 import '../../core/formato.dart';
 import '../../core/sesion.dart';
 import '../../models/modelos.dart';
+import '../../pdf/documentos_pdf.dart';
 import '../../widgets/comunes.dart';
+import '../../widgets/exportar.dart';
 import '../../widgets/perfil.dart';
 import '../carrito/carrito_screen.dart';
 import 'producto_detalle_screen.dart';
@@ -22,6 +24,7 @@ class CatalogoScreen extends StatefulWidget {
 class _CatalogoScreenState extends State<CatalogoScreen> {
   String _buscar = '';
   String _filtro = 'active'; // active | bajo | inactive
+  String _orden = 'nombre|asc';
   int? _categoria;
   List<Categoria> _categorias = [];
 
@@ -74,7 +77,8 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
         'status': _filtro == 'inactive' ? 'inactive' : 'active',
         if (_filtro == 'bajo') 'stockBajo': 1,
         'categoria': _categoria,
-        'sortBy': 'nombre',
+        'sortBy': _orden.split('|').first,
+        'sortDir': _orden.split('|').last,
         'page': _pagina + 1,
         'limit': 20,
       });
@@ -93,6 +97,31 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
     }
   }
 
+  /// Catálogo en PDF con los filtros puestos (igual que el botón PDF de la web).
+  Future<void> _exportar() async {
+    final filas = await Api.i.todos('/api/productos', Producto.desdeJson, query: {
+      'search': _buscar,
+      'status': _filtro == 'inactive' ? 'inactive' : 'active',
+      if (_filtro == 'bajo') 'stockBajo': 1,
+      'categoria': _categoria,
+      'sortBy': _orden.split('|').first,
+      'sortDir': _orden.split('|').last,
+    });
+    await compartirListadoPdf<Producto>(
+      titulo: 'productos',
+      filas: filas,
+      columnas: [
+        ColumnaPdf('Producto', (p) => p.nombre),
+        ColumnaPdf('SKU', (p) => p.sku),
+        ColumnaPdf('Categoría', (p) => p.categoria),
+        ColumnaPdf('Proveedor', (p) => p.proveedor),
+        ColumnaPdf('Precio', (p) => p.precio, dinero: true),
+        ColumnaPdf('Stock', (p) => p.stock, numero: true),
+        ColumnaPdf('Estado', (p) => p.estado ? 'Activo' : 'Inactivo'),
+      ],
+    );
+  }
+
   void _cambiarFiltro(void Function() cambio) {
     setState(cambio);
     _recargar();
@@ -101,9 +130,26 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Catálogo'), actions: const [BotonCarrito(), BotonPerfil()]),
+      appBar: AppBar(title: const Text('Catálogo'), actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Ordenar',
+          icon: const Icon(Icons.sort),
+          initialValue: _orden,
+          onSelected: (v) => _cambiarFiltro(() => _orden = v),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'nombre|asc', child: Text('Nombre (A-Z)')),
+            PopupMenuItem(value: 'nombre|desc', child: Text('Nombre (Z-A)')),
+            PopupMenuItem(value: 'precio|asc', child: Text('Precio: menor a mayor')),
+            PopupMenuItem(value: 'precio|desc', child: Text('Precio: mayor a menor')),
+            PopupMenuItem(value: 'stock|asc', child: Text('Stock: menor a mayor')),
+          ],
+        ),
+        if (Sesion.i.esEquipo) BotonPdf(exportar: _exportar),
+        const BotonCarrito(),
+        const BotonPerfil(),
+      ]),
       // Crear productos es del Administrador.
-      floatingActionButton: !Sesion.i.esAdmin
+      floatingActionButton: !Sesion.i.puede('products.create')
           ? null
           : FloatingActionButton.extended(
               heroTag: 'fab_catalogo',
@@ -122,7 +168,7 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
               for (final f in {
                 'active': 'Disponibles',
                 if (Sesion.i.esEquipo) 'bajo': 'Stock bajo',
-                if (Sesion.i.esAdmin) 'inactive': 'Inactivos',
+                if (Sesion.i.puede('products.edit')) 'inactive': 'Inactivos',
               }.entries)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -157,7 +203,7 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
     return GridView.builder(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(12, 4, 12, Sesion.i.esAdmin ? 96 : 16),
+      padding: EdgeInsets.fromLTRB(12, 4, 12, Sesion.i.puede('products.create') ? 96 : 16),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 220,
         mainAxisSpacing: 10,
@@ -196,8 +242,9 @@ class _TarjetaProducto extends StatelessWidget {
                   child: Text(dinero(p.precio),
                       style: tema.textTheme.titleMedium?.copyWith(color: tema.colorScheme.primary, fontWeight: FontWeight.w700)),
                 ),
-                // Atajo del cliente: agregar al carrito sin abrir el producto.
-                if (Sesion.i.esCliente && p.vendible)
+                // Atajo: agregar al carrito sin abrir el producto (el cliente
+                // para su pedido; el equipo, para armar un pedido a un cliente).
+                if (Sesion.i.puede('orders.create') && p.vendible)
                   SizedBox(
                     width: 30,
                     height: 26,

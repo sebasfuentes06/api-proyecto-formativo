@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/config.dart';
 import '../core/sesion.dart';
+import '../screens/cuenta/mi_perfil_screen.dart';
 import '../screens/usuarios/usuarios_screen.dart';
 import 'comunes.dart';
 
@@ -29,63 +30,82 @@ class BotonPerfil extends StatelessWidget {
     );
   }
 
+  /// Menú de la cuenta. Va dentro de un scroll y con altura controlada:
+  /// antes era una columna fija y, en pantallas bajas, no cabía y Flutter
+  /// pintaba la franja amarilla de "overflow" encima de "Cerrar sesión".
   void _abrir(BuildContext context) {
     final u = Sesion.i.usuario;
+    final error = Theme.of(context).colorScheme.error;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.person)),
-              title: Text(u?.nombre ?? 'Administrador'),
-              subtitle: Text('${u?.correo ?? ''}\n${u?.rol ?? ''}'),
-              isThreeLine: true,
-            ),
-            const Divider(),
-            if (Sesion.i.esAdmin)
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.manage_accounts_outlined),
-                title: const Text('Usuarios y roles'),
-                subtitle: const Text('Administradores, vendedores y clientes con acceso'),
+                leading: const CircleAvatar(child: Icon(Icons.person)),
+                title: Text(u?.nombre ?? ''),
+                subtitle: Text('${u?.correo ?? ''}\n${u?.rol ?? ''}'),
+                isThreeLine: true,
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: const Text('Mi perfil'),
+                subtitle: const Text('Mis datos, verificar correo y contraseña'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const UsuariosScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const MiPerfilScreen()));
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.password),
-              title: const Text('Cambiar contraseña'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _cambiarClave(context);
-              },
-            ),
-            if (Sesion.i.esEquipo)
-            ListTile(
-              leading: const Icon(Icons.credit_card),
-              title: const Text('Estado de Wompi'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _estadoWompi(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_outlined),
-              title: const Text('Servidor'),
-              subtitle: Text(Config.apiUrl),
-            ),
-            ListTile(
-              leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
-              title: Text('Cerrar sesión', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              onTap: () {
-                Navigator.pop(ctx);
-                Sesion.i.cerrar();
-              },
-            ),
-          ],
+              if (Sesion.i.puede('users.view'))
+                ListTile(
+                  leading: const Icon(Icons.manage_accounts_outlined),
+                  title: const Text('Usuarios'),
+                  subtitle: const Text('Cuentas, solicitudes y permisos'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const UsuariosScreen()));
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.password),
+                title: const Text('Cambiar contraseña'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  cambiarClave(context);
+                },
+              ),
+              if (Sesion.i.esEquipo)
+                ListTile(
+                  leading: const Icon(Icons.credit_card),
+                  title: const Text('Estado de Wompi'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _estadoWompi(context);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: const Text('Servidor'),
+                subtitle: Text(Config.apiUrl),
+              ),
+              ListTile(
+                leading: Icon(Icons.logout, color: error),
+                title: Text('Cerrar sesión', style: TextStyle(color: error)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Sesion.i.cerrar();
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -115,43 +135,5 @@ class BotonPerfil extends StatelessWidget {
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
       ),
     );
-  }
-
-  Future<void> _cambiarClave(BuildContext context) async {
-    final actual = TextEditingController();
-    final nueva = TextEditingController();
-    final repetir = TextEditingController();
-    final form = GlobalKey<FormState>();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cambiar contraseña'),
-        content: Form(
-          key: form,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextFormField(controller: actual, obscureText: true, decoration: const InputDecoration(labelText: 'Contraseña actual'),
-                validator: (v) => (v ?? '').isEmpty ? 'Obligatoria' : null),
-            const SizedBox(height: 12),
-            TextFormField(controller: nueva, obscureText: true, decoration: const InputDecoration(labelText: 'Nueva (mínimo 8)'),
-                validator: (v) => (v ?? '').length < 8 ? 'Mínimo 8 caracteres' : null),
-            const SizedBox(height: 12),
-            TextFormField(controller: repetir, obscureText: true, decoration: const InputDecoration(labelText: 'Repite la nueva'),
-                validator: (v) => v != nueva.text ? 'No coincide' : null),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () {
-              if (form.currentState!.validate()) Navigator.pop(ctx, true);
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    final r = await conCarga(context, Api.i.put('/api/auth/password', {'actual': actual.text, 'nueva': nueva.text}), avisarCambio: false);
-    if (r != null && context.mounted) mostrarMensaje(context, 'Contraseña actualizada.');
   }
 }

@@ -124,11 +124,11 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
               }
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'imprimir', child: ListTile(leading: Icon(Icons.print), title: Text('Imprimir / guardar PDF'))),
+              const PopupMenuItem(value: 'imprimir', child: ListTile(leading: Icon(Icons.print), title: Text('Imprimir factura PDF'))),
               if (v.debe)
                 const PopupMenuItem(value: 'verificar', child: ListTile(leading: Icon(Icons.verified_outlined), title: Text('Verificar pago Wompi'))),
               // Anular es solo del Administrador.
-              if (!v.anulada && Sesion.i.esAdmin)
+              if (!v.anulada && Sesion.i.puede('sales.cancel'))
                 const PopupMenuItem(value: 'anular', child: ListTile(leading: Icon(Icons.block, color: rojo), title: Text('Anular venta'))),
             ],
           ),
@@ -271,8 +271,8 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
               color: const Color(0xFFFFF3E0),
               child: ListTile(
                 leading: const Icon(Icons.hourglass_top, color: ambar),
-                title: Text(Sesion.i.esAdmin ? 'Hay pagos del cliente por aprobar' : 'Tienes pagos en revisión'),
-                subtitle: Text(Sesion.i.esAdmin
+                title: Text(Sesion.i.esEquipo ? 'Hay pagos del cliente por aprobar' : 'Tienes pagos en revisión'),
+                subtitle: Text(Sesion.i.esEquipo
                     ? 'Toca el pago para ver el comprobante y aprobarlo o rechazarlo.'
                     : 'El saldo se actualiza cuando la administradora los apruebe.'),
               ),
@@ -280,7 +280,7 @@ class _VentaDetalleScreenState extends State<VentaDetalleScreen> {
           for (final p in v.pagos)
             FilaPago(
               pago: p,
-              trailing: p.aplicado && !v.anulada && Sesion.i.esAdmin
+              trailing: p.aplicado && !v.anulada && Sesion.i.puede('payments.delete')
                   ? IconButton(tooltip: 'Anular pago', icon: const Icon(Icons.undo), onPressed: () => _anularPago(p))
                   : null,
             ),

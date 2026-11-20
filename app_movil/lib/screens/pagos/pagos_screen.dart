@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/exportar.dart';
 
 import '../../core/api.dart';
 import '../../core/contacto.dart';
@@ -20,9 +21,27 @@ import 'pago_detalle.dart';
 class PagosScreen extends StatelessWidget {
   const PagosScreen({super.key});
 
+  /// Todos los pagos registrados, en PDF (igual que el botón PDF de la web).
+  static Future<void> _exportarPagos() async {
+    final filas = await Api.i.todos('/api/pagos', Pago.desdeJson);
+    await compartirListadoPdf<Pago>(
+      titulo: 'pagos',
+      filas: filas,
+      columnas: [
+        ColumnaPdf('Fecha', (p) => p.fecha),
+        ColumnaPdf('Factura', (p) => p.numeroFactura),
+        ColumnaPdf('Cliente', (p) => p.cliente),
+        ColumnaPdf('Método', (p) => nombresMetodo[p.metodo] ?? p.metodo),
+        ColumnaPdf('Referencia', (p) => p.referencia),
+        ColumnaPdf('Estado', (p) => nombresEstadoPago[p.estado] ?? p.estado),
+        ColumnaPdf('Monto', (p) => p.monto, dinero: true),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final admin = Sesion.i.esAdmin;
+    final admin = Sesion.i.puede('payments.edit');
     return DefaultTabController(
       length: admin ? 3 : 2,
       child: Scaffold(
@@ -30,6 +49,7 @@ class PagosScreen extends StatelessWidget {
           title: const Text('Pagos y abonos'),
           actions: [
             IconButton(tooltip: 'Verificar pago Wompi', icon: const Icon(Icons.verified_outlined), onPressed: () => verificarPagoWompi(context)),
+            BotonPdf(exportar: _exportarPagos, tooltip: 'Listado de pagos en PDF'),
             const BotonPerfil(),
           ],
           bottom: TabBar(tabs: [

@@ -78,6 +78,22 @@ class _ClienteDetalleScreenState extends State<ClienteDetalleScreen> {
     if (r != null && mounted) mostrarMensaje(context, c.estado ? 'Cliente desactivado.' : 'Cliente activado.');
   }
 
+  /// Un cliente con compras o pedidos no se puede borrar: la API lo rechaza
+  /// y el motivo sale en una ventana emergente (igual que en la web).
+  Future<void> _eliminar() async {
+    final c = _cliente!;
+    final ok = await eliminarConAviso(
+      context,
+      nombre: c.nombre,
+      ruta: '/api/clientes/${c.id}',
+      nota: 'Nota: un cliente con compras no se puede borrar. Se deben inactivar (anular) sus compras y luego inactivar el cliente en lugar de borrarlo.',
+    );
+    if (ok && mounted) {
+      mostrarMensaje(context, 'Cliente eliminado.');
+      Navigator.pop(context);
+    }
+  }
+
   void _enviarEstadoCuenta() {
     final c = _cliente!;
     final res = _cuenta!['resumen'] as Map<String, dynamic>;
@@ -111,25 +127,28 @@ class _ClienteDetalleScreenState extends State<ClienteDetalleScreen> {
         appBar: AppBar(
           title: Text(c.nombre),
           actions: [
-            IconButton(
-              tooltip: 'Editar',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ClienteFormScreen(cliente: c))),
-            ),
+            if (Sesion.i.puede('customers.edit'))
+              IconButton(
+                tooltip: 'Editar',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ClienteFormScreen(cliente: c))),
+              ),
             PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == 'estado') _cambiarEstado();
-                if (v == 'pdf') compartirEstadoCuentaPdf(c, _cuenta!);
+                if (v == 'pdf') conCarga(context, compartirEstadoCuentaPdf(c, _cuenta!), avisarCambio: false);
+                if (v == 'eliminar') _eliminar();
                 if (v == 'acceso') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => UsuarioFormScreen(clienteInicial: c)));
                 }
               },
               itemBuilder: (_) => [
-                // Activar/desactivar clientes y darles acceso es del Administrador.
-                if (Sesion.i.esAdmin)
+                if (Sesion.i.puede('customers.toggle'))
                   PopupMenuItem(value: 'estado', child: Text(c.estado ? 'Desactivar cliente' : 'Activar cliente')),
-                if (Sesion.i.esAdmin) const PopupMenuItem(value: 'acceso', child: Text('Dar acceso a la app')),
-                const PopupMenuItem(value: 'pdf', child: Text('Estado de cuenta en PDF')),
+                if (Sesion.i.puede('users.create')) const PopupMenuItem(value: 'acceso', child: Text('Dar acceso a la app')),
+                if (_cuenta != null) const PopupMenuItem(value: 'pdf', child: Text('Estado de cuenta en PDF')),
+                if (Sesion.i.puede('customers.delete'))
+                  const PopupMenuItem(value: 'eliminar', child: Text('Eliminar cliente', style: TextStyle(color: rojo))),
               ],
             ),
           ],
@@ -219,7 +238,7 @@ class _ClienteDetalleScreenState extends State<ClienteDetalleScreen> {
         ),
       const TituloSeccion('Contacto'),
       dato(Icons.phone_outlined, 'Teléfono', c.telefono),
-      dato(Icons.home_outlined, 'Dirección', [c.direccion, c.ciudad].whereType<String>().where((s) => s.isNotEmpty).join(', ')),
+      dato(Icons.home_outlined, 'Dirección', [c.direccion, c.ciudad, c.departamento].whereType<String>().where((s) => s.isNotEmpty).join(', ')),
       dato(Icons.mail_outline, 'Correo', c.correo),
       dato(Icons.badge_outlined, 'Documento', c.documento == null ? null : '${c.tipoDocumento ?? ''} ${c.documento}'.trim()),
       if (c.notas != null && c.notas!.isNotEmpty) dato(Icons.notes, 'Notas', c.notas),

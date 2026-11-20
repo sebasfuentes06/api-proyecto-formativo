@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../pdf/documentos_pdf.dart';
 
 import '../../core/api.dart';
 import '../../core/formato.dart';
@@ -203,7 +204,7 @@ class _HojaPagoState extends State<_HojaPago> {
             label: Text(_tieneComprobante ? 'Cambiar comprobante' : 'Adjuntar comprobante'),
           ),
         ],
-        if (p.porAprobar && Sesion.i.esAdmin) ...[
+        if (p.porAprobar && Sesion.i.esEquipo && Sesion.i.puede('payments.edit')) ...[
           const SizedBox(height: 20),
           Row(children: [
             Expanded(
@@ -225,8 +226,13 @@ class _HojaPagoState extends State<_HojaPago> {
             ),
           ]),
         ],
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: () => conCarga(context, compartirReciboPdf(p), avisarCambio: false),
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+          label: const Text('Recibo PDF'),
+        ),
         if (Sesion.i.esEquipo && p.numeroFactura != null) ...[
-          const SizedBox(height: 8),
           TextButton.icon(
             onPressed: () {
               final nav = Navigator.of(context);

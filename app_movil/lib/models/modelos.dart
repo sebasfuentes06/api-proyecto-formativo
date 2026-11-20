@@ -13,6 +13,7 @@ class Cliente {
     this.telefono,
     this.direccion,
     this.ciudad,
+    this.departamento,
     this.documento,
     this.tipoDocumento,
     this.notas,
@@ -25,7 +26,7 @@ class Cliente {
 
   final int id;
   final String nombre;
-  final String? correo, telefono, direccion, ciudad, documento, tipoDocumento, notas;
+  final String? correo, telefono, direccion, ciudad, departamento, documento, tipoDocumento, notas;
   final bool estado;
   final DateTime? fechaRegistro, ultimaCompra;
   final int compras;
@@ -44,6 +45,7 @@ class Cliente {
         telefono: j['telefono'],
         direccion: j['direccion'],
         ciudad: j['ciudad'],
+        departamento: j['departamento'],
         documento: j['documento'],
         tipoDocumento: j['tipo_documento'],
         notas: j['notas'],
@@ -56,19 +58,166 @@ class Cliente {
 }
 
 class Categoria {
-  Categoria(this.id, this.nombre, this.estado);
+  Categoria(this.id, this.nombre, this.estado, {this.descripcion, this.totalProductos = 0, this.creadaEn});
   final int id;
   final String nombre;
   final bool estado;
-  factory Categoria.desdeJson(Json j) => Categoria(aInt(j['id_categoria']), j['nombre'] ?? '', j['estado'] ?? true);
+  final String? descripcion;
+  final int totalProductos;
+  final DateTime? creadaEn;
+  factory Categoria.desdeJson(Json j) => Categoria(
+        aInt(j['id_categoria']),
+        j['nombre'] ?? '',
+        j['estado'] ?? true,
+        descripcion: j['descripcion'],
+        totalProductos: aInt(j['total_productos']),
+        creadaEn: aFecha(j['created_at']),
+      );
 }
 
 class Proveedor {
-  Proveedor(this.id, this.nombre, this.estado);
+  Proveedor(
+    this.id,
+    this.nombre,
+    this.estado, {
+    this.tipoPersona,
+    this.tipoDocumento,
+    this.documento,
+    this.contacto,
+    this.email,
+    this.telefono,
+    this.ciudad,
+    this.departamento,
+    this.fechaAlta,
+    this.totalProductos = 0,
+    this.totalCompras = 0,
+    this.totalComprado = 0,
+  });
   final int id;
   final String nombre;
   final bool estado;
-  factory Proveedor.desdeJson(Json j) => Proveedor(aInt(j['id_proveedor']), j['nombre'] ?? '', j['estado'] ?? true);
+  final String? tipoPersona, tipoDocumento, documento, contacto, email, telefono, ciudad, departamento;
+  final DateTime? fechaAlta;
+  final int totalProductos, totalCompras;
+  final double totalComprado;
+
+  factory Proveedor.desdeJson(Json j) => Proveedor(
+        aInt(j['id_proveedor']),
+        j['nombre'] ?? '',
+        j['estado'] ?? true,
+        tipoPersona: j['tipo_persona'],
+        tipoDocumento: j['tipo_documento'],
+        documento: j['documento'],
+        contacto: j['contacto'],
+        email: j['email'],
+        telefono: j['telefono'],
+        ciudad: j['ciudad'],
+        departamento: j['departamento'],
+        fechaAlta: aFecha(j['fecha_alta']),
+        totalProductos: aInt(j['total_productos']),
+        totalCompras: aInt(j['total_compras']),
+        totalComprado: aNum(j['total_comprado']),
+      );
+}
+
+/// Línea de una compra a proveedor.
+class LineaCompra {
+  LineaCompra({required this.idProducto, required this.nombre, this.sku = '', required this.cantidad, required this.costoUnitario, required this.subtotal});
+  final int idProducto;
+  final String nombre, sku;
+  final int cantidad;
+  final double costoUnitario, subtotal;
+
+  factory LineaCompra.desdeJson(Json j) => LineaCompra(
+        idProducto: aInt(j['id_producto']),
+        nombre: j['nombre'] ?? '',
+        sku: j['sku'] ?? '',
+        cantidad: aInt(j['cantidad']),
+        costoUnitario: aNum(j['costo_unitario']),
+        subtotal: aNum(j['subtotal']),
+      );
+}
+
+/// Abono a una compra.
+class PagoCompra {
+  PagoCompra({required this.id, required this.monto, required this.metodo, this.referencia, this.fecha});
+  final int id;
+  final double monto;
+  final String metodo;
+  final String? referencia;
+  final DateTime? fecha;
+
+  factory PagoCompra.desdeJson(Json j) => PagoCompra(
+        id: aInt(j['id_pago_compra']),
+        monto: aNum(j['monto']),
+        metodo: j['metodo'] ?? '',
+        referencia: j['referencia'],
+        fecha: aFecha(j['fecha']),
+      );
+}
+
+/// Compra a un proveedor: suma al stock al registrarla.
+class Compra {
+  Compra({
+    required this.id,
+    required this.folio,
+    this.fecha,
+    required this.idProveedor,
+    required this.proveedor,
+    required this.total,
+    required this.pagado,
+    required this.saldo,
+    required this.estado,
+    required this.estadoPago,
+    this.notas,
+    this.motivoCancelacion,
+    this.registro,
+    this.unidades = 0,
+    this.lineas = 0,
+    this.items = const [],
+    this.pagos = const [],
+  });
+  final int id;
+  final String folio;
+  final DateTime? fecha;
+  final int idProveedor;
+  final String proveedor;
+  final double total, pagado, saldo;
+
+  /// vigente | cancelada
+  final String estado;
+
+  /// pendiente | parcial | pagada
+  final String estadoPago;
+  final String? notas, motivoCancelacion, registro;
+  final int unidades, lineas;
+  final List<LineaCompra> items;
+  final List<PagoCompra> pagos;
+
+  bool get cancelada => estado == 'cancelada';
+
+  factory Compra.desdeJson(Json j) {
+    final cancelada = j['estado'] == 'cancelada';
+    return Compra(
+      id: aInt(j['id_compra']),
+      folio: j['folio'] ?? '',
+      fecha: aFecha(j['fecha']),
+      idProveedor: aInt(j['id_proveedor']),
+      proveedor: j['proveedor'] ?? '',
+      total: aNum(j['total']),
+      pagado: aNum(j['pagado']),
+      saldo: cancelada ? 0 : aNum(j['saldo']),
+      estado: j['estado'] ?? 'vigente',
+      estadoPago: j['estado_pago'] ?? 'pendiente',
+      notas: j['notas'],
+      motivoCancelacion: j['motivo_cancelacion'],
+      registro: j['registro'],
+      unidades: aInt(j['unidades']),
+      lineas: aInt(j['lineas']),
+      items: ((j['items'] as List?) ?? []).map((e) => LineaCompra.desdeJson(e as Json)).toList(),
+      pagos: ((j['pagos'] as List?) ?? []).map((e) => PagoCompra.desdeJson(e as Json)).toList(),
+    );
+  }
 }
 
 class Producto {
@@ -419,6 +568,9 @@ class UsuarioApp {
     this.telefono,
     this.motivoRechazo,
     this.creadoEn,
+    this.permisos = const [],
+    this.permisosPersonalizados = false,
+    this.correoVerificado = false,
   });
 
   final int id;
@@ -432,6 +584,10 @@ class UsuarioApp {
   final String aprobacion;
   final String? telefono, motivoRechazo;
   final DateTime? creadoEn;
+
+  /// Permisos efectivos (los del rol o los personalizados).
+  final List<String> permisos;
+  final bool permisosPersonalizados, correoVerificado;
 
   bool get pendiente => aprobacion == 'pendiente';
   bool get rechazado => aprobacion == 'rechazado';
@@ -449,5 +605,8 @@ class UsuarioApp {
         telefono: j['telefono'],
         motivoRechazo: j['motivo_rechazo'],
         creadoEn: aFecha(j['created_at']),
+        permisos: ((j['permisos'] as List?) ?? []).map((e) => e.toString()).toList(),
+        permisosPersonalizados: j['permisos_personalizados'] == true,
+        correoVerificado: j['correo_verificado'] == true,
       );
 }

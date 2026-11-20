@@ -522,3 +522,142 @@ class FiltroChips<T> extends StatelessWidget {
         ),
       );
 }
+
+// ---------------------------------------------------------------------------
+// Salir de un formulario
+// ---------------------------------------------------------------------------
+
+/// Pregunta "¿Seguro que quieres salir?" antes de cerrar un formulario.
+Future<bool> confirmarSalida(BuildContext context) async {
+  final r = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.warning_amber_rounded, color: ambar, size: 36),
+      title: const Text('¿Seguro que quieres salir?'),
+      content: const Text('Lo que escribiste en el formulario no se guardará.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Seguir editando')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Sí, salir'),
+        ),
+      ],
+    ),
+  );
+  return r ?? false;
+}
+
+/// Envuelve la pantalla de un formulario: la flecha de atrás (o el gesto
+/// del sistema) primero pregunta si de verdad se quiere salir. Guardar
+/// cierra directo, porque Navigator.pop no pasa por esta pregunta.
+class ProtegerSalida extends StatelessWidget {
+  const ProtegerSalida({super.key, required this.child, this.activo = true});
+  final Widget child;
+
+  /// Para dejar salir sin preguntar (por ejemplo, mientras carga).
+  final bool activo;
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: !activo,
+        onPopInvokedWithResult: (salio, _) async {
+          if (salio) return;
+          if (await confirmarSalida(context) && context.mounted) Navigator.pop(context);
+        },
+        child: child,
+      );
+}
+
+// ---------------------------------------------------------------------------
+// Avisos emergentes
+// ---------------------------------------------------------------------------
+
+/// Ventana emergente con un aviso (por ejemplo, "No se puede eliminar...").
+Future<void> mostrarAviso(BuildContext context, {required String mensaje, String titulo = 'No se puede eliminar', String? nombre}) =>
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: ambar, size: 40),
+        title: Text(titulo, textAlign: TextAlign.center),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (nombre != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(nombre, style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          Text(mensaje, textAlign: TextAlign.center),
+        ]),
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Entendido'))],
+      ),
+    );
+
+/// Pide confirmación para eliminar (con una nota de cuándo no se puede) y,
+/// si la API lo rechaza, muestra el motivo en una ventana emergente.
+/// Devuelve true si se eliminó.
+Future<bool> eliminarConAviso(
+  BuildContext context, {
+  required String nombre,
+  required String ruta,
+  String? nota,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error, size: 36),
+      title: const Text('¿Eliminar este elemento?'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(nombre, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        const Text('Esta acción no se puede deshacer.', textAlign: TextAlign.center),
+        if (nota != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).colorScheme.errorContainer.withAlpha(120),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(nota, style: const TextStyle(fontSize: 13)),
+          ),
+        ],
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Sí, eliminar'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return false;
+
+  final navigator = Navigator.of(context, rootNavigator: true);
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const PopScope(
+      canPop: false,
+      child: Center(child: Card(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))),
+    ),
+  );
+  try {
+    await Api.i.delete(ruta);
+    navigator.pop();
+    Eventos.cambiaron();
+    return true;
+  } catch (e) {
+    navigator.pop();
+    if (context.mounted) {
+      await mostrarAviso(context, nombre: nombre, mensaje: e is ApiException ? e.mensaje : 'No se pudo eliminar: $e');
+    }
+    return false;
+  }
+}

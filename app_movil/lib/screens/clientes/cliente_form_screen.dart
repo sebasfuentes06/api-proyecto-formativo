@@ -10,7 +10,8 @@ import '../../widgets/comunes.dart';
 /// una venta) lo recibe listo para usar.
 ///
 /// Mismos campos y mismo orden que el registro: nombre, tipo y número de
-/// documento, celular, municipio de Antioquia (API), dirección y correo.
+/// documento, celular, departamento y municipio (API Colombia), dirección y
+/// correo.
 class ClienteFormScreen extends StatefulWidget {
   const ClienteFormScreen({super.key, this.cliente});
   final Cliente? cliente;
@@ -33,6 +34,7 @@ class _ClienteFormScreenState extends State<ClienteFormScreen> {
     tipoDocumento: tiposDocumento.containsKey(widget.cliente?.tipoDocumento) ? widget.cliente?.tipoDocumento : null,
     documento: widget.cliente?.documento ?? '',
     telefono: _celularLimpio(widget.cliente?.telefono),
+    departamento: (widget.cliente?.departamento ?? '').isEmpty ? 'Antioquia' : widget.cliente!.departamento!,
     municipio: widget.cliente?.ciudad,
     direccion: widget.cliente?.direccion ?? '',
     correo: widget.cliente?.correo ?? '',
@@ -68,8 +70,11 @@ class _ClienteFormScreenState extends State<ClienteFormScreen> {
     Navigator.pop(context, Cliente.desdeJson(r['datos']));
   }
 
+  /// La flecha de atrás pregunta antes de salir (lo escrito se perdería).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ProtegerSalida(child: _formulario(context));
+
+  Widget _formulario(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(_editando ? 'Editar cliente' : 'Nuevo cliente')),
       body: Form(

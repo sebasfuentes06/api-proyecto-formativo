@@ -128,8 +128,11 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => VentaDetalleScreen(idVenta: venta.id, recienCreada: true)));
   }
 
+  /// La flecha de atrás pregunta antes de salir (lo escrito se perdería).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ProtegerSalida(child: _formulario(context));
+
+  Widget _formulario(BuildContext context) {
     final tema = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Nueva venta')),
@@ -228,7 +231,7 @@ class _VentaFormScreenState extends State<VentaFormScreen> {
             if (_pagaAhora && _total > 0)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: CamposPago(key: ValueKey('$_total|$_metodo'), datos: _pago, maximo: _total, obligatorio: false),
+                child: CamposPago(key: ValueKey('$_total|$_metodo'), datos: _pago, maximo: _total, obligatorio: false, metodos: metodosPagoInicial),
               ),
           ],
           Padding(

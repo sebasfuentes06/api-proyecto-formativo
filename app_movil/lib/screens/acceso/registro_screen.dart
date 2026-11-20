@@ -81,8 +81,11 @@ class _RegistroScreenState extends State<RegistroScreen> {
     );
   }
 
+  /// La flecha de atrás pregunta antes de salir (lo escrito se perdería).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ProtegerSalida(child: _formulario(context));
+
+  Widget _formulario(BuildContext context) {
     const espacio = SizedBox(height: 14);
     return Scaffold(
       appBar: AppBar(title: const Text('Crear cuenta')),

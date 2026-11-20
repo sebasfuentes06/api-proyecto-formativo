@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
+import '../../core/carrito.dart';
 import '../../core/config.dart';
 import '../../core/contacto.dart';
 import '../../core/formato.dart';
 import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
+import '../carrito/carrito_screen.dart';
 import '../login_screen.dart';
 import 'registro_screen.dart';
 
 /// Vitrina pública: lo primero que ve quien abre la app sin sesión.
 ///
 /// Muestra los productos que se venden (catálogo real de la API, con sus
-/// fotos). Para pedir hay que crear una cuenta o iniciar sesión.
+/// fotos). Igual que en la web, el visitante puede ir armando su carrito;
+/// para continuar la compra debe registrarse o iniciar sesión, y al entrar
+/// como Cliente el carrito pasa a su cuenta.
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
 
@@ -37,6 +41,7 @@ class _LandingScreenState extends State<LandingScreen> {
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) _cargar();
     });
+    Carrito.i.cargarInvitado();
     Future.microtask(() async {
       await _cargarCategorias();
       await _recargar();
@@ -104,6 +109,23 @@ class _LandingScreenState extends State<LandingScreen> {
     if (correo != null && mounted) await _entrar(correo: correo);
   }
 
+  void _abrirCarrito() => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => CarritoScreen(onRegistrarse: _registrarse, onEntrar: _entrar)),
+      );
+
+  void _agregar(Producto p) {
+    final ok = Carrito.i.agregar(p);
+    final m = ScaffoldMessenger.of(context);
+    m.hideCurrentSnackBar();
+    m.showSnackBar(SnackBar(
+      content: Text(ok ? '${p.nombre} agregado al carrito' : 'Solo hay ${p.stock} unidad(es) de ${p.nombre}.'),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+      action: ok ? SnackBarAction(label: 'Ver carrito', onPressed: _abrirCarrito) : null,
+    ));
+  }
+
   void _verProducto(Producto p) {
     final tema = Theme.of(context);
     showModalBottomSheet<void>(
@@ -130,6 +152,18 @@ class _LandingScreenState extends State<LandingScreen> {
             Text(p.descripcion!, style: tema.textTheme.bodyLarge),
           ],
           const SizedBox(height: 20),
+          if (p.vendible) ...[
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _agregar(p);
+              },
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text('Agregar al carrito'),
+            ),
+            const SizedBox(height: 12),
+          ],
           Card(
             color: tema.colorScheme.secondaryContainer,
             child: const Padding(
@@ -137,19 +171,19 @@ class _LandingScreenState extends State<LandingScreen> {
               child: Row(children: [
                 Icon(Icons.lock_outline),
                 SizedBox(width: 10),
-                Expanded(child: Text('Para hacer tu pedido y pagar desde la app, crea tu cuenta o inicia sesión.')),
+                Expanded(child: Text('Arma tu carrito aquí. Para continuar la compra, crea tu cuenta o inicia sesión.')),
               ]),
             ),
           ),
           const SizedBox(height: 12),
-          FilledButton.icon(
+          OutlinedButton.icon(
             onPressed: () {
               Navigator.pop(ctx);
               _registrarse();
             },
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
             icon: const Icon(Icons.person_add_alt),
-            label: const Text('Crear cuenta para pedir'),
+            label: const Text('Crear cuenta'),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
@@ -187,6 +221,18 @@ class _LandingScreenState extends State<LandingScreen> {
               foregroundColor: tema.colorScheme.onPrimary,
               title: const Text('Essence Don Aire'),
               actions: [
+                ListenableBuilder(
+                  listenable: Carrito.i,
+                  builder: (_, __) => IconButton(
+                    tooltip: 'Carrito',
+                    onPressed: _abrirCarrito,
+                    icon: Badge(
+                      isLabelVisible: !Carrito.i.vacio,
+                      label: Text('${Carrito.i.unidades}'),
+                      child: const Icon(Icons.shopping_cart_outlined),
+                    ),
+                  ),
+                ),
                 TextButton(
                   onPressed: _entrar,
                   style: TextButton.styleFrom(foregroundColor: tema.colorScheme.onPrimary),
@@ -314,7 +360,20 @@ class _LandingScreenState extends State<LandingScreen> {
                             child: Text(dinero(p.precio),
                                 style: tema.textTheme.titleMedium?.copyWith(color: tema.colorScheme.primary, fontWeight: FontWeight.w700)),
                           ),
-                          if (p.agotado) const Text('Agotado', style: TextStyle(color: rojo, fontSize: 12)),
+                          if (p.agotado)
+                            const Text('Agotado', style: TextStyle(color: rojo, fontSize: 12))
+                          else
+                            SizedBox(
+                              width: 30,
+                              height: 26,
+                              child: IconButton.filledTonal(
+                                tooltip: 'Agregar al carrito',
+                                padding: EdgeInsets.zero,
+                                iconSize: 17,
+                                icon: const Icon(Icons.add_shopping_cart),
+                                onPressed: () => _agregar(p),
+                              ),
+                            ),
                         ]),
                       ]),
                     ),

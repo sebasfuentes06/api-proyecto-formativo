@@ -7,8 +7,10 @@ import '../../models/modelos.dart';
 import '../../widgets/comunes.dart';
 import '../pedidos/pedido_form_screen.dart';
 
-/// Carrito del Cliente: ícono con el número de productos, barra que queda
-/// visible en todas las pestañas y la pantalla para revisar y hacer el pedido.
+/// Carrito: ícono con el número de productos, barra que queda visible en
+/// todas las pestañas y la pantalla para revisar y hacer el pedido. Lo usa el
+/// Cliente y también el equipo, que arma pedidos desde el catálogo (en el
+/// pedido escoge el cliente, igual que en la web).
 
 void abrirCarrito(BuildContext context) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen()));
@@ -32,7 +34,8 @@ class BotonCarrito extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!Sesion.i.esCliente) return const SizedBox.shrink();
+    // El cliente compra; el equipo también arma pedidos desde el catálogo.
+    if (!Sesion.i.puede('orders.create')) return const SizedBox.shrink();
     return ListenableBuilder(
       listenable: Carrito.i,
       builder: (_, __) => IconButton(
@@ -95,7 +98,11 @@ class BarraCarrito extends StatelessWidget {
 
 /// Revisar el carrito, cambiar cantidades y hacer el pedido.
 class CarritoScreen extends StatelessWidget {
-  const CarritoScreen({super.key});
+  const CarritoScreen({super.key, this.onRegistrarse, this.onEntrar});
+
+  /// Visitante de la vitrina (sin sesión): para continuar debe registrarse
+  /// o iniciar sesión (igual que en la web).
+  final VoidCallback? onRegistrarse, onEntrar;
 
   Future<void> _vaciar(BuildContext context) async {
     final ok = await confirmar(context, titulo: 'Vaciar carrito', mensaje: '¿Quitar todos los productos?', textoOk: 'Vaciar');
@@ -111,14 +118,49 @@ class CarritoScreen extends StatelessWidget {
         final c = Carrito.i;
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Mi carrito'),
+            title: Text(!Sesion.i.activa || Sesion.i.esCliente ? 'Mi carrito' : 'Carrito del pedido'),
             actions: [
               if (!c.vacio) IconButton(tooltip: 'Vaciar', icon: const Icon(Icons.delete_sweep_outlined), onPressed: () => _vaciar(context)),
             ],
           ),
           bottomNavigationBar: c.vacio
               ? null
-              : SafeArea(
+              : !Sesion.i.activa
+                  ? SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          Row(children: [
+                            Text('Total', style: tema.textTheme.bodyMedium),
+                            const Spacer(),
+                            Text(dinero(c.total), style: tema.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Text('Para continuar con tu compra debes registrarte o iniciar sesión. Tu carrito se guarda.',
+                              style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.outline)),
+                          const SizedBox(height: 8),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                            icon: const Icon(Icons.person_add_alt),
+                            label: const Text('Registrarme para continuar'),
+                            onPressed: () {
+                              Carrito.i.abrirAlEntrar = true;
+                              Navigator.pop(context);
+                              onRegistrarse?.call();
+                            },
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Carrito.i.abrirAlEntrar = true;
+                              Navigator.pop(context);
+                              onEntrar?.call();
+                            },
+                            child: const Text('Ya tengo cuenta'),
+                          ),
+                        ]),
+                      ),
+                    )
+                  : SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: Row(children: [

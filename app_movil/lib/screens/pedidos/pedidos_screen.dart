@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../catalogo/catalogo_screen.dart';
+import '../../widgets/exportar.dart';
+import '../../pdf/documentos_pdf.dart';
 
 import '../../core/api.dart';
 import '../../core/formato.dart';
@@ -22,6 +25,25 @@ class _PedidosScreenState extends State<PedidosScreen> {
   String _estado = 'pendiente';
   String _canal = '';
 
+  Future<void> _exportar() async {
+    final filas = await Api.i.todos('/api/pedidos', Pedido.desdeJson, query: {'search': _buscar, 'estado': _estado, 'canal': _canal});
+    await compartirListadoPdf<Pedido>(
+      titulo: 'pedidos',
+      filas: filas,
+      columnas: [
+        ColumnaPdf('Código', (p) => p.codigo),
+        ColumnaPdf('Fecha', (p) => p.fecha),
+        ColumnaPdf('Cliente', (p) => p.cliente),
+        ColumnaPdf('Canal', (p) => nombresCanal[p.canal] ?? p.canal),
+        ColumnaPdf('Unidades', (p) => p.unidades, numero: true),
+        ColumnaPdf('Forma de pago', (p) => nombresMetodo[p.metodoPago] ?? p.metodoPago),
+        ColumnaPdf('Total', (p) => p.total, dinero: true),
+        ColumnaPdf('Estado', (p) => capitalizar(p.estado)),
+        ColumnaPdf('Factura', (p) => p.numeroFactura),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,10 +62,19 @@ class _PedidosScreenState extends State<PedidosScreen> {
               PopupMenuItem(value: 'punto_fisico', child: Text('Solo punto físico')),
             ],
           ),
+          if (Sesion.i.esEquipo && Sesion.i.puede('orders.create'))
+            IconButton(
+              tooltip: 'Pedido desde el catálogo',
+              icon: const Icon(Icons.local_florist_outlined),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogoScreen())),
+            ),
+          if (Sesion.i.esEquipo) BotonPdf(exportar: _exportar),
           const BotonPerfil(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: !Sesion.i.puede('orders.create')
+          ? null
+          : FloatingActionButton.extended(
         heroTag: 'fab_pedidos',
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PedidoFormScreen())),
         icon: const Icon(Icons.add),

@@ -168,6 +168,21 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
     await conCarga(context, Api.i.put('/api/productos/${_p.id}', {'estado': !_p.estado}));
   }
 
+  /// Si el producto está en un pedido (o venta o compra), la API no deja
+  /// borrarlo y el motivo sale en una ventana emergente.
+  Future<void> _eliminar() async {
+    final ok = await eliminarConAviso(
+      context,
+      nombre: _p.nombre,
+      ruta: '/api/productos/${_p.id}',
+      nota: 'Nota: un producto que ya está relacionado a un pedido (o a una venta o compra) no se puede eliminar; desactívalo en su lugar.',
+    );
+    if (ok && mounted) {
+      mostrarMensaje(context, 'Producto eliminado.');
+      Navigator.pop(context);
+    }
+  }
+
   void _compartir() {
     final texto = StringBuffer()
       ..writeln('*${_p.nombre}*')
@@ -182,7 +197,7 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
-    final admin = Sesion.i.esAdmin;
+    final admin = Sesion.i.puede('products.edit');
     return Scaffold(
       appBar: AppBar(
         title: Text(_p.nombre),
@@ -196,10 +211,14 @@ class _ProductoDetalleScreenState extends State<ProductoDetalleScreen> {
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductoFormScreen(producto: _p))),
             ),
-          if (admin)
+          if (admin || Sesion.i.puede('products.delete'))
             PopupMenuButton<String>(
-              onSelected: (v) => v == 'estado' ? _cambiarEstado() : null,
-              itemBuilder: (_) => [PopupMenuItem(value: 'estado', child: Text(_p.estado ? 'Desactivar' : 'Activar'))],
+              onSelected: (v) => v == 'estado' ? _cambiarEstado() : _eliminar(),
+              itemBuilder: (_) => [
+                if (admin) PopupMenuItem(value: 'estado', child: Text(_p.estado ? 'Desactivar' : 'Activar')),
+                if (Sesion.i.puede('products.delete'))
+                  const PopupMenuItem(value: 'eliminar', child: Text('Eliminar', style: TextStyle(color: rojo))),
+              ],
             ),
         ],
       ),

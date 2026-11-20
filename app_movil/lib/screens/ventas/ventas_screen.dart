@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../widgets/exportar.dart';
+import '../../pdf/documentos_pdf.dart';
 
 import '../../core/api.dart';
 import '../../core/eventos.dart';
@@ -60,6 +62,25 @@ class _VentasScreenState extends State<VentasScreen> {
     };
   }
 
+  Future<void> _exportar() async {
+    final filas = await Api.i.todos('/api/ventas', Venta.desdeJson, query: _query);
+    await compartirListadoPdf<Venta>(
+      titulo: 'ventas',
+      filas: filas,
+      columnas: [
+        ColumnaPdf('Factura', (v) => v.numeroFactura),
+        ColumnaPdf('Fecha', (v) => v.fecha),
+        ColumnaPdf('Cliente', (v) => v.cliente),
+        ColumnaPdf('Forma de pago', (v) => nombresMetodo[v.metodoPago] ?? v.metodoPago),
+        ColumnaPdf('Atendió', (v) => v.vendedor),
+        ColumnaPdf('Total', (v) => v.total, dinero: true),
+        ColumnaPdf('Pagado', (v) => v.pagado, dinero: true),
+        ColumnaPdf('Saldo', (v) => v.anulada ? 0 : v.saldo, dinero: true),
+        ColumnaPdf('Estado', (v) => v.anulada ? 'Anulada' : capitalizar(v.estadoPago)),
+      ],
+    );
+  }
+
   Future<void> _elegirRango() async {
     final r = await showDateRangePicker(
       context: context,
@@ -83,10 +104,11 @@ class _VentasScreenState extends State<VentasScreen> {
         title: Text(Sesion.i.esCliente ? 'Mis compras' : 'Ventas'),
         actions: [
           IconButton(tooltip: 'Filtrar por fechas', icon: const Icon(Icons.date_range), onPressed: _elegirRango),
+          if (Sesion.i.esEquipo) BotonPdf(exportar: _exportar),
           const BotonPerfil(),
         ],
       ),
-      floatingActionButton: !Sesion.i.esEquipo
+      floatingActionButton: !Sesion.i.esEquipo || !Sesion.i.puede('sales.create')
           ? null
           : FloatingActionButton.extended(
               heroTag: 'fab_ventas',
@@ -169,7 +191,7 @@ class _VentasScreenState extends State<VentasScreen> {
     final porAprobar = aInt(r?['pagos_por_aprobar']);
     return Column(children: [
       // Aviso para el Administrador: gente que se registró y espera aprobación.
-      if (Sesion.i.esAdmin && solicitudes > 0)
+      if (Sesion.i.puede('users.view') && solicitudes > 0)
         Card(
           color: tema.colorScheme.tertiaryContainer,
           child: ListTile(
@@ -181,7 +203,7 @@ class _VentasScreenState extends State<VentasScreen> {
           ),
         ),
       // Pagos que reportaron los clientes (transferencias con comprobante).
-      if (Sesion.i.esAdmin && porAprobar > 0)
+      if (Sesion.i.puede('payments.edit') && porAprobar > 0)
         Card(
           color: const Color(0xFFFFF3E0),
           child: ListTile(

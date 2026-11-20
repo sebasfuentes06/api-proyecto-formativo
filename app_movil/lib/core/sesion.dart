@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'permisos.dart';
 
 /// Roles del proyecto (los mismos de la app web).
 class Rol {
@@ -15,16 +16,42 @@ class Rol {
 }
 
 class Usuario {
-  Usuario({required this.id, required this.nombre, required this.correo, required this.rol, this.idCliente});
+  Usuario({
+    required this.id,
+    required this.nombre,
+    required this.correo,
+    required this.rol,
+    this.idCliente,
+    this.telefono,
+    this.permisos,
+    this.correoVerificado = false,
+  });
   final int id;
   final String nombre;
   final String correo;
   final String rol;
+  final String? telefono;
 
   /// Solo para el rol Cliente: su ficha en la tabla de clientes.
   final int? idCliente;
 
-  Map<String, dynamic> aJson() => {'id_usuario': id, 'nombre': nombre, 'correo': correo, 'rol': rol, 'id_cliente': idCliente};
+  /// Permisos efectivos que manda la API (pueden estar personalizados para
+  /// esta persona). Si una API vieja no los manda, se usan los del rol.
+  final List<String>? permisos;
+  final bool correoVerificado;
+
+  List<String> get permisosEfectivos => permisos ?? permisosPorRol[rol] ?? const [];
+
+  Map<String, dynamic> aJson() => {
+        'id_usuario': id,
+        'nombre': nombre,
+        'correo': correo,
+        'rol': rol,
+        'id_cliente': idCliente,
+        'telefono': telefono,
+        'permisos': permisos,
+        'correo_verificado': correoVerificado,
+      };
 
   factory Usuario.desdeJson(Map<String, dynamic> j) => Usuario(
         id: (j['id_usuario'] as num).toInt(),
@@ -32,6 +59,9 @@ class Usuario {
         correo: j['correo'] ?? '',
         rol: j['rol'] ?? '',
         idCliente: (j['id_cliente'] as num?)?.toInt(),
+        telefono: j['telefono'] as String?,
+        permisos: (j['permisos'] as List?)?.map((e) => e.toString()).toList(),
+        correoVerificado: j['correo_verificado'] == true,
       );
 }
 
@@ -54,6 +84,21 @@ class Sesion extends ChangeNotifier {
 
   /// Administrador o Vendedor: el equipo que atiende la tienda.
   bool get esEquipo => esAdmin || esVendedor;
+
+  /// ¿La persona tiene este permiso? ("sales.create", "products.edit"...)
+  bool puede(String permiso) => usuario?.permisosEfectivos.contains(permiso) ?? false;
+
+  /// ¿Tiene al menos uno de estos permisos?
+  bool puedeAlguno(List<String> permisos) => permisos.any(puede);
+
+  /// Cambia los datos de la sesión (después de editar el perfil o
+  /// verificar el correo) y los guarda en el teléfono.
+  Future<void> actualizar(Map<String, dynamic> datosUsuario) async {
+    usuario = Usuario.desdeJson(datosUsuario);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_claveUsuario, jsonEncode(usuario!.aJson()));
+    notifyListeners();
+  }
 
   /// Al abrir la app: si hay un token guardado, se valida contra la API.
   ///
